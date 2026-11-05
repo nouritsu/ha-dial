@@ -18,6 +18,7 @@ bool board_button_down(void);
 void board_set_backlight(int percent);
 void board_sleep_display(void);
 void board_wake_display(void);
+void board_hold_backlight_off(void);
 void board_ignore_held_input(void);
 
 void board_inject_touch(int x, int y, uint32_t ms);

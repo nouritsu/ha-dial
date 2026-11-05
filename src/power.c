@@ -31,6 +31,7 @@ bool power_light_sleep(int off_after_minutes) {
 
 void power_off(void) {
   board_sleep_display();
+  board_hold_backlight_off();
   // on battery, releasing the hold line cuts power; on USB the chip stays up,
   // so touch wakes it from deep sleep
   esp_sleep_enable_ext1_wakeup(1ULL << PIN_TOUCH_INT, ESP_EXT1_WAKEUP_ANY_LOW);

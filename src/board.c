@@ -68,6 +68,7 @@ static void apply_backlight(int percent) {
 }
 
 static void init_backlight(void) {
+  gpio_hold_dis(PIN_LCD_BL);
   ledc_timer_config_t timer = {
       .speed_mode = LEDC_LOW_SPEED_MODE,
       .duty_resolution = LEDC_TIMER_8_BIT,
@@ -93,8 +94,17 @@ void board_set_backlight(int percent) {
 
 void board_sleep_display(void) {
   asleep = true;
-  apply_backlight(0);
+  // forces the pin low right away; a duty change only lands at the end of the
+  // PWM period
+  ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
   esp_lcd_panel_io_tx_param(panel_io, 0x10, NULL, 0);
+}
+
+void board_hold_backlight_off(void) {
+  gpio_reset_pin(PIN_LCD_BL);
+  gpio_set_direction(PIN_LCD_BL, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_LCD_BL, 0);
+  gpio_hold_en(PIN_LCD_BL);
 }
 
 void board_wake_display(void) {
@@ -163,7 +173,19 @@ static void init_display(void) {
   esp_lcd_panel_reset(panel);
   esp_lcd_panel_init(panel);
   esp_lcd_panel_invert_color(panel, true);
+  // M5GFX sets the source scan direction (B6h) instead, which the driver leaves
+  // at its default
+  esp_lcd_panel_mirror(panel, true, false);
   esp_lcd_panel_disp_on_off(panel, true);
+}
+
+static void keep_driven_in_sleep(void) {
+  // light sleep isolates every pad by default, which would float the power
+  // hold line, reset the panel and let the backlight come on
+  static const int pins[] = {PIN_HOLD, PIN_BUZZER, PIN_LCD_CS, PIN_LCD_RST,
+                             PIN_LCD_BL};
+  for (int i = 0; i < sizeof pins / sizeof *pins; i++)
+    gpio_sleep_sel_dis(pins[i]);
 }
 
 static i2c_master_dev_handle_t add_device(uint16_t address) {
@@ -346,6 +368,7 @@ void board_init(void) {
   lv_init();
   lv_tick_set_cb(now_ms);
   init_display();
+  keep_driven_in_sleep();
   init_i2c();
   init_touch();
   init_encoder();
