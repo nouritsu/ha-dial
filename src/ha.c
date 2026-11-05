@@ -28,7 +28,7 @@ static esp_websocket_client_handle_t client;
 static QueueHandle_t inbox;
 static link_t state = LINK_OFFLINE;
 static bool started;
-static int next_id, search_id, subscribe_id;
+static int next_id, search_id, subscribe_id, answered;
 static char *partial;
 
 static void post(msg_type_t type, char *text) {
@@ -71,15 +71,16 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id,
   }
 }
 
-static void send_json(cJSON *root) {
+static bool send_json(cJSON *root) {
   char *text = cJSON_PrintUnformatted(root);
   cJSON_Delete(root);
   if (!text)
-    return;
-  if (esp_websocket_client_is_connected(client))
-    esp_websocket_client_send_text(client, text, strlen(text),
-                                   pdMS_TO_TICKS(1000));
+    return false;
+  bool sent = esp_websocket_client_is_connected(client) &&
+              esp_websocket_client_send_text(client, text, strlen(text),
+                                             pdMS_TO_TICKS(1000)) >= 0;
   free(text);
+  return sent;
 }
 
 static cJSON *command(const char *type, int *id) {
@@ -108,6 +109,8 @@ static void subscribe(void) {
 
 static void handle_result(const cJSON *msg) {
   int id = cJSON_GetNumberValue(get(msg, "id"));
+  if (id > answered)
+    answered = id;
   if (!cJSON_IsTrue(get(msg, "success"))) {
     const char *error = cJSON_GetStringValue(get(get(msg, "error"), "message"));
     ESP_LOGW(TAG, "request %d failed: %s", id, error ? error : "?");
@@ -126,6 +129,7 @@ static void stop_client(void) {
   if (started)
     esp_websocket_client_stop(client);
   started = false;
+  answered = next_id;
   while (xQueueReceive(inbox, &msg, 0))
     free(msg.text);
 }
@@ -198,6 +202,7 @@ void ha_loop(void) {
   while (state != LINK_AUTH_FAILED && xQueueReceive(inbox, &msg, 0)) {
     if (msg.type == MSG_DISCONNECTED) {
       state = LINK_CONNECTING;
+      answered = next_id;
     } else if (msg.type == MSG_TEXT) {
       handle(msg.text);
       free(msg.text);
@@ -213,9 +218,10 @@ void ha_stop(void) {
 
 link_t ha_link(void) { return state; }
 
-void ha_call(const char *domain, const char *service, const char *const *ids,
-             int count, const char *data) {
-  cJSON *root = command("call_service", NULL);
+int ha_call(const char *domain, const char *service, const char *const *ids,
+            int count, const char *data) {
+  int id;
+  cJSON *root = command("call_service", &id);
   cJSON_AddStringToObject(root, "domain", domain);
   cJSON_AddStringToObject(root, "service", service);
   cJSON *target = cJSON_AddObjectToObject(root, "target");
@@ -224,5 +230,7 @@ void ha_call(const char *domain, const char *service, const char *const *ids,
   cJSON *service_data = data ? cJSON_Parse(data) : NULL;
   if (service_data)
     cJSON_AddItemToObject(root, "service_data", service_data);
-  send_json(root);
+  return send_json(root) ? id : 0;
 }
+
+bool ha_waiting(int id) { return id > answered; }

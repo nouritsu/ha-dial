@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 typedef enum {
   LINK_OFFLINE,
   LINK_CONNECTING,
@@ -12,5 +14,7 @@ void ha_loop(void);
 void ha_stop(void);
 link_t ha_link(void);
 
-void ha_call(const char *domain, const char *service, const char *const *ids,
-             int count, const char *data);
+// returns the request id, or 0 when there is no connection to send it on
+int ha_call(const char *domain, const char *service, const char *const *ids,
+            int count, const char *data);
+bool ha_waiting(int id);

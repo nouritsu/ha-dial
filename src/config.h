@@ -10,14 +10,23 @@
 #define DIAL_NTP_SERVER "pool.ntp.org"
 
 #define ENCODER_COUNTS_PER_DETENT 4
-#define ENCODER_REVERSED 0
+#define ENCODER_REVERSED 1
 #define LONG_PRESS_MS 600
 
 #define BRIGHTNESS_STEP 5
 #define HUE_STEP 10
 #define KELVIN_STEP 200
 
-#define SEND_INTERVAL_MS 250
+// light values move 2x or 4x per click once the clicks average under these
+// gaps; a pause or a change of direction drops back to 1x
+#define ACCEL_DOUBLE_MS 60
+#define ACCEL_QUADRUPLE_MS 30
+#define ACCEL_IDLE_MS 200
+
+// a new value goes out as soon as HA has finished applying the previous one
+#define SEND_INTERVAL_MS 50
+#define CALL_TIMEOUT_MS 3000
+#define TRANSITION_MS 300
 #define ECHO_HOLD_MS 2000
 #define WIFI_FALLBACK_MS 4000
 
