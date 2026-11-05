@@ -114,6 +114,7 @@ void app_main(void) {
   }
   board_init();
   settings_load();
+  board_set_rotation(settings.rotation);
   console_init();
   ui_init();
   lv_refr_now(NULL);

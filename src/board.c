@@ -21,6 +21,7 @@
 #define HEIGHT 240
 #define BUFFER_BYTES (WIDTH * 40 * 2)
 #define CAPTURE_CHUNK 768
+#define COLOR_FORMAT LV_COLOR_FORMAT_RGB565
 
 #define PIN_BUZZER 3
 #define PIN_LCD_DC 4
@@ -35,6 +36,7 @@
 static lv_display_t *display;
 static esp_lcd_panel_io_handle_t panel_io;
 static esp_lcd_panel_handle_t panel;
+static uint8_t *rotated;
 static i2c_master_bus_handle_t i2c;
 static i2c_master_dev_handle_t touch_dev, rtc_dev;
 static pcnt_unit_handle_t encoder;
@@ -128,11 +130,30 @@ static void capture_area(const lv_area_t *area, const uint8_t *px) {
 }
 
 static void flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
+  lv_area_t target = *area;
+  lv_display_rotation_t rotation = lv_display_get_rotation(disp);
+  if (rotation != LV_DISPLAY_ROTATION_0) {
+    int32_t w = lv_area_get_width(area), h = lv_area_get_height(area);
+    lv_display_rotate_area(disp, &target);
+    lv_draw_rotate(
+        px, rotated, w, h, lv_draw_buf_width_to_stride(w, COLOR_FORMAT),
+        lv_draw_buf_width_to_stride(lv_area_get_width(&target), COLOR_FORMAT),
+        rotation, COLOR_FORMAT);
+    px = rotated;
+  }
   if (capturing)
-    capture_area(area, px);
-  lv_draw_rgb565_swap(px, lv_area_get_size(area));
-  esp_lcd_panel_draw_bitmap(panel, area->x1, area->y1, area->x2 + 1,
-                            area->y2 + 1, px);
+    capture_area(&target, px);
+  lv_draw_rgb565_swap(px, lv_area_get_size(&target));
+  esp_lcd_panel_draw_bitmap(panel, target.x1, target.y1, target.x2 + 1,
+                            target.y2 + 1, px);
+}
+
+void board_set_rotation(int degrees) {
+  // LVGL turns the content counter-clockwise; the setting is clockwise
+  static const lv_display_rotation_t rotations[] = {
+      LV_DISPLAY_ROTATION_0, LV_DISPLAY_ROTATION_270, LV_DISPLAY_ROTATION_180,
+      LV_DISPLAY_ROTATION_90};
+  lv_display_set_rotation(display, rotations[degrees / 90 % 4]);
 }
 
 static bool flush_done(esp_lcd_panel_io_handle_t io,
@@ -150,6 +171,8 @@ static void init_display(void) {
       heap_caps_malloc(BUFFER_BYTES, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
   lv_display_set_buffers(display, a, b, BUFFER_BYTES,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
+  rotated =
+      heap_caps_malloc(BUFFER_BYTES, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 
   spi_bus_config_t bus = {
       .sclk_io_num = PIN_LCD_SCLK,

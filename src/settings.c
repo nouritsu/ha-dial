@@ -17,10 +17,9 @@ static const struct {
   const char *key;
   uint16_t *value;
 } fields[] = {
-    {"bright", &settings.brightness},
-    {"clock", &settings.clock_after},
-    {"sleep", &settings.sleep_after},
-    {"off", &settings.power_off_after},
+    {"bright", &settings.brightness}, {"clock", &settings.clock_after},
+    {"sleep", &settings.sleep_after}, {"off", &settings.power_off_after},
+    {"rot", &settings.rotation},
 };
 
 void settings_load(void) {
