@@ -23,7 +23,6 @@ in {
   env = {
     # toolchains, frameworks and libraries stay in .devenv/state
     PLATFORMIO_CORE_DIR = "${config.devenv.state}/platformio";
-    DIAL_PORT = "/dev/ttyACM0";
     MONTSERRAT_DIR = "${pkgs.montserrat}/share/fonts/ttf";
     MDI_TTF = "${mdi}/fonts/materialdesignicons-webfont.ttf";
   };
@@ -43,10 +42,13 @@ in {
     settings.global.excludes = ["src/ui/fonts/*"];
   };
 
-  scripts = {
+  scripts = let
+    # the by-id link keeps working when the Dial comes back as another ttyACM after a reset
+    port = ''"''${DIAL_PORT:-$(ls /dev/serial/by-id/usb-Espressif_* | head -n1)}"'';
+  in {
     build.exec = ''pio run "$@"'';
-    flash.exec = ''pio run -t upload --upload-port "$DIAL_PORT" "$@"'';
-    monitor.exec = ''pio device monitor -p "$DIAL_PORT" "$@"'';
+    flash.exec = ''pio run -t upload --upload-port ${port} "$@"'';
+    monitor.exec = ''pio device monitor -p ${port} "$@"'';
     # compile_commands.json for clangd
     compdb.exec = ''pio run -t compiledb "$@"'';
     fonts.exec = ''bash "$DEVENV_ROOT/tools/fonts.sh"'';

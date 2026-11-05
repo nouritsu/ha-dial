@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import glob
 import os
 import struct
 import sys
@@ -12,16 +13,17 @@ import zlib
 import serial
 
 
+def default_port():
+    if os.environ.get("DIAL_PORT"):
+        return os.environ["DIAL_PORT"]
+    ports = sorted(glob.glob("/dev/serial/by-id/usb-Espressif_*"))
+    return ports[0] if ports else "/dev/ttyACM0"
+
+
 def open_port(port):
-    # DTR/RTS stay low: toggling them through the USB-JTAG bridge resets the chip
-    s = serial.Serial()
-    s.port = port
-    s.baudrate = 115200
-    s.timeout = 0.1
-    s.dtr = False
-    s.rts = False
-    s.open()
-    return s
+    # DTR and RTS stay as the kernel raises them on open: changing either one
+    # makes the USB-JTAG bridge reset the chip
+    return serial.Serial(port, 115200, timeout=0.1, write_timeout=2)
 
 
 def lines(s, seconds):
@@ -35,8 +37,11 @@ def lines(s, seconds):
 
 
 def send(s, command):
-    s.write(command.encode() + b"\n")
-    s.flush()
+    try:
+        s.write(command.encode() + b"\n")
+        s.flush()
+    except serial.SerialTimeoutException:
+        sys.exit("the Dial is asleep; turn the knob and try again")
 
 
 def rgb565(px):
@@ -94,7 +99,7 @@ def shot(s, path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", default=os.environ.get("DIAL_PORT", "/dev/ttyACM0"))
+    parser.add_argument("--port", default=default_port())
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("shot", help="save the screen as a PNG")
     p.add_argument("path", nargs="?", default="shot.png")

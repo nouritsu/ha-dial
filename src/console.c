@@ -8,6 +8,8 @@
 
 #include "app.h"
 #include "board.h"
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "ha.h"
@@ -62,7 +64,14 @@ static void run(char *line) {
   fflush(stdout);
 }
 
-void console_init(void) { fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK); }
+void console_init(void) {
+  // without the driver, non-blocking reads never see the receive FIFO
+  usb_serial_jtag_driver_config_t config =
+      USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+  usb_serial_jtag_driver_install(&config);
+  usb_serial_jtag_vfs_use_driver();
+  fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
+}
 
 void console_loop(void) {
   static char line[64];
