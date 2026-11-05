@@ -9,5 +9,8 @@ devenv.local.yaml
 .cache
 .clangd
 .pio
+managed_components
+sdkconfig.dial
+sdkconfig.old
 compile_commands.json
 secrets.ini
