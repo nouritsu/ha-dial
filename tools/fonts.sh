@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# regenerates src/ui/fonts from Montserrat and the icon codepoints used in src/ui/icons.h
+# regenerates src/ui/fonts from Montserrat and the icon codepoints used in src/ui/icons.{h,c}
 set -euo pipefail
 cd "$DEVENV_ROOT"
 
 out=src/ui/fonts
 mkdir -p "$out"
 text="0x20-0x7E,0xA0-0xFF,0x2019,0x2026"
-icons=$(grep -o 'U000F[0-9A-F]\{4\}' src/ui/icons.h | sed 's/^U000/0x/' | sort -u | paste -sd,)
+icons=$(grep -ho 'U000F[0-9A-F]\{4\}' src/ui/icons.h src/ui/icons.c | sed 's/^U000/0x/' | sort -u | paste -sd,)
 
 conv() {
   local name=$1

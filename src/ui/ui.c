@@ -1,0 +1,155 @@
+#include "ui.h"
+
+#include <math.h>
+#include <string.h>
+
+#include "board.h"
+#include "config.h"
+#include "ha.h"
+#include "model.h"
+#include "screen.h"
+#include "settings.h"
+
+static screen_t *const screens[] = {
+    [SCREEN_HOME] = &home_screen,
+    [SCREEN_LIGHT] = &light_screen,
+    [SCREEN_CLOCK] = &clock_screen,
+    [SCREEN_SETTINGS] = &settings_screen,
+};
+
+static screen_id_t current = SCREEN_HOME;
+static uint32_t seen_revision, seen_layout;
+static int seen_link = -1;
+static uint32_t link_changed_at;
+static lv_obj_t *rim;
+
+lv_obj_t *ui_label(lv_obj_t *parent, const lv_font_t *font, lv_color_t color) {
+  lv_obj_t *label = lv_label_create(parent);
+  lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_set_style_text_color(label, color, 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_text(label, "");
+  return label;
+}
+
+lv_obj_t *ui_circle(lv_obj_t *parent, int size, lv_color_t color) {
+  lv_obj_t *obj = lv_obj_create(parent);
+  lv_obj_set_size(obj, size, size);
+  lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(obj, color, 0);
+  lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(obj, COLOR_TEXT, 0);
+  ui_inert(obj);
+  return obj;
+}
+
+void ui_inert(lv_obj_t *obj) {
+  lv_obj_set_clickable(obj, false);
+  lv_obj_set_scrollable(obj, false);
+}
+
+void ui_set_text(lv_obj_t *label, const char *text) {
+  if (strcmp(lv_label_get_text(label), text))
+    lv_label_set_text(label, text);
+}
+
+void ui_place(lv_obj_t *obj, float degrees, float radius) {
+  float rad = degrees * (float)M_PI / 180;
+  lv_obj_align(obj, LV_ALIGN_CENTER, (int)lroundf(radius * cosf(rad)),
+               (int)lroundf(radius * sinf(rad)));
+}
+
+void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data) {
+  lv_obj_set_clickable(obj, true);
+  lv_obj_add_event_cb(obj, cb, LV_EVENT_SHORT_CLICKED, user_data);
+}
+
+static lv_obj_t *make_screen(void) {
+  lv_obj_t *root = lv_obj_create(NULL);
+  lv_obj_set_style_bg_color(root, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
+  lv_obj_set_scrollable(root, false);
+  return root;
+}
+
+static void update_rim(void) {
+  link_t link = ha_link();
+  bool show = link == LINK_AUTH_FAILED ||
+              (link != LINK_READY && now_ms() - link_changed_at > 1500);
+  if (show)
+    lv_obj_set_style_border_color(
+        rim, link == LINK_AUTH_FAILED ? COLOR_ERROR : COLOR_WARNING, 0);
+  if (show == lv_obj_is_hidden(rim))
+    lv_obj_set_hidden(rim, !show);
+}
+
+void ui_init(void) {
+  for (int i = 0; i < sizeof screens / sizeof *screens; i++) {
+    screens[i]->root = make_screen();
+    screens[i]->build(screens[i]->root);
+  }
+  rim = lv_obj_create(lv_layer_top());
+  lv_obj_set_size(rim, SCREEN_SIZE, SCREEN_SIZE);
+  lv_obj_set_style_radius(rim, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_border_width(rim, 3, 0);
+  ui_inert(rim);
+  lv_obj_set_hidden(rim, true);
+
+  seen_layout = model_layout();
+  home_relayout();
+  ui_show(SCREEN_HOME, NULL);
+}
+
+void ui_loop(void) {
+  if (model_layout() != seen_layout) {
+    seen_layout = model_layout();
+    home_relayout();
+    seen_revision = 0;
+  }
+  if ((int)ha_link() != seen_link) {
+    seen_link = ha_link();
+    link_changed_at = now_ms();
+    seen_revision = 0;
+  }
+  if (model_revision() != seen_revision) {
+    seen_revision = model_revision();
+    if (screens[current]->refresh)
+      screens[current]->refresh();
+  }
+  update_rim();
+}
+
+void ui_show(screen_id_t id, const char *target) {
+  screen_t *from = screens[current], *to = screens[id];
+  if (from->leave)
+    from->leave();
+  current = id;
+  if (to->enter)
+    to->enter(target);
+  if (to->refresh)
+    to->refresh();
+  if (current != id)
+    return;
+  lv_screen_load(to->root);
+  int level = settings.brightness;
+  if (id == SCREEN_CLOCK)
+    level = level / 3 > 10 ? level / 3 : 10;
+  board_set_backlight(level);
+}
+
+screen_id_t ui_current(void) { return current; }
+
+void ui_rotate(int steps) {
+  if (screens[current]->rotate)
+    screens[current]->rotate(steps);
+}
+
+void ui_click(void) {
+  if (screens[current]->click)
+    screens[current]->click();
+}
+
+void ui_long_press(void) {
+  if (screens[current]->long_press)
+    screens[current]->long_press();
+}
