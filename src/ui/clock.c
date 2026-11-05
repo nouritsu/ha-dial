@@ -59,15 +59,15 @@ static void build(lv_obj_t *root) {
                         LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(weather, 6, 0);
   ui_inert(weather);
-  lv_obj_align(weather, LV_ALIGN_TOP_MID, 0, 42);
-  weather_icon = ui_label(weather, &icons_32, COLOR_MUTED);
-  temperature = ui_label(weather, &text_28, COLOR_MUTED);
+  lv_obj_align(weather, LV_ALIGN_TOP_MID, 0, 46);
+  weather_icon = ui_label(weather, &icons_28, COLOR_PRIMARY);
+  temperature = ui_label(weather, &text_20, COLOR_ON_SURFACE_VARIANT);
 
-  clock_time = ui_label(root, &clock_56, COLOR_TEXT);
-  lv_obj_align(clock_time, LV_ALIGN_CENTER, 0, 4);
+  clock_time = ui_label(root, &clock_64, COLOR_ON_SURFACE);
+  lv_obj_align(clock_time, LV_ALIGN_CENTER, 0, 0);
 
-  date = ui_label(root, &text_18, COLOR_MUTED);
-  lv_obj_align(date, LV_ALIGN_CENTER, 0, 52);
+  date = ui_label(root, &text_20, COLOR_ON_SURFACE_VARIANT);
+  lv_obj_align(date, LV_ALIGN_CENTER, 0, 48);
 
   ticker = lv_timer_create(tick, 1000, NULL);
   lv_timer_pause(ticker);

@@ -2,22 +2,27 @@
 
 #include "lvgl.h"
 
-LV_FONT_DECLARE(text_14)
-LV_FONT_DECLARE(text_18)
-LV_FONT_DECLARE(text_28)
-LV_FONT_DECLARE(clock_56)
-LV_FONT_DECLARE(icons_20)
-LV_FONT_DECLARE(icons_32)
+LV_FONT_DECLARE(text_16)
+LV_FONT_DECLARE(text_20)
+LV_FONT_DECLARE(text_36)
+LV_FONT_DECLARE(clock_64)
+LV_FONT_DECLARE(icons_24)
+LV_FONT_DECLARE(icons_28)
 LV_FONT_DECLARE(icons_72)
 
-#define COLOR_TEXT lv_color_hex(0xF5F5F7)
-#define COLOR_MUTED lv_color_hex(0x8E8E93)
-#define COLOR_FAINT lv_color_hex(0x48484A)
-#define COLOR_SURFACE lv_color_hex(0x1C1C1E)
-#define COLOR_TRACK lv_color_hex(0x2C2C2E)
-#define COLOR_ACCENT lv_color_hex(0x64D2FF)
-#define COLOR_WARNING lv_color_hex(0xFFB340)
-#define COLOR_ERROR lv_color_hex(0xFF453A)
+// Material 3 dark roles over a black background
+#define COLOR_ON_SURFACE lv_color_hex(0xE6E0E9)
+#define COLOR_ON_SURFACE_VARIANT lv_color_hex(0xCAC4D0)
+#define COLOR_OUTLINE lv_color_hex(0x938F99)
+#define COLOR_OUTLINE_VARIANT lv_color_hex(0x49454F)
+#define COLOR_SURFACE_CONTAINER lv_color_hex(0x211F26)
+#define COLOR_SURFACE_CONTAINER_HIGHEST lv_color_hex(0x36343B)
+#define COLOR_PRIMARY lv_color_hex(0xD0BCFF)
+#define COLOR_SECONDARY_CONTAINER lv_color_hex(0x4A4458)
+#define COLOR_ON_SECONDARY_CONTAINER lv_color_hex(0xE8DEF8)
+#define COLOR_TERTIARY lv_color_hex(0xEFB8C8)
+#define COLOR_WARNING lv_color_hex(0xFFCC80)
+#define COLOR_ERROR lv_color_hex(0xF2B8B5)
 
 #define SCREEN_SIZE 240
 #define SCREEN_CENTER 120
@@ -41,5 +46,10 @@ lv_obj_t *ui_label(lv_obj_t *parent, const lv_font_t *font, lv_color_t color);
 lv_obj_t *ui_circle(lv_obj_t *parent, int size, lv_color_t color);
 void ui_inert(lv_obj_t *obj);
 void ui_set_text(lv_obj_t *label, const char *text);
+void ui_set_text_color(lv_obj_t *obj, lv_color_t color);
+void ui_set_bg(lv_obj_t *obj, lv_color_t color, lv_opa_t opa);
+void ui_set_outline(lv_obj_t *obj, int width);
 void ui_place(lv_obj_t *obj, float degrees, float radius);
 void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data);
+lv_color_t ui_pastel(uint32_t rgb);
+lv_color_t ui_on_pastel(lv_color_t pastel);

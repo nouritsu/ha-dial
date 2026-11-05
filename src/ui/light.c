@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "actions.h"
@@ -31,11 +32,11 @@ static int clamp(int v, int lo, int hi) {
 }
 
 static lv_color_t hue_at(float t, const void *ctx) {
-  return lv_color_hex(model_hsv((int)(t * 359), 100, 100));
+  return ui_pastel(model_hsv((int)(t * 359), 100, 100));
 }
 
 static lv_color_t kelvin_at(float t, const void *ctx) {
-  return lv_color_hex(
+  return ui_pastel(
       model_kelvin_color(range.min + (int)(t * (range.max - range.min))));
 }
 
@@ -48,7 +49,7 @@ static void build(lv_obj_t *root) {
 static void enter(const char *id) {
   strlcpy(target, id ? id : "", sizeof target);
   mode = MODE_BRIGHTNESS;
-  lv_obj_invalidate(face.ring);
+  face_reset(&face);
 }
 
 static void refresh(void) {
@@ -61,7 +62,7 @@ static void refresh(void) {
   if (!(modes >> mode & 1))
     mode = MODE_BRIGHTNESS;
   const light_state_t *s = &t.state;
-  lv_color_t tint = lv_color_hex(model_tint(s));
+  lv_color_t tint = ui_pastel(model_tint(s));
   range.min = t.min_kelvin;
   range.max = t.max_kelvin > t.min_kelvin ? t.max_kelvin : t.min_kelvin + 1;
   char text[16];
@@ -73,32 +74,33 @@ static void refresh(void) {
       snprintf(text, sizeof text, "%d%%", percent);
     else
       snprintf(text, sizeof text, "Off");
-    face_progress(&face, percent / 100.0f, s->on ? tint : COLOR_MUTED,
-                  COLOR_TEXT);
+    face_progress(&face, percent / 100.0f, s->on ? tint : COLOR_OUTLINE,
+                  s->on ? tint : COLOR_ON_SURFACE_VARIANT);
     break;
   }
   case MODE_HUE:
     snprintf(text, sizeof text, "%d\u00B0", s->hue);
     face_gradient(&face, s->hue / 359.0f, hue_at, NULL,
-                  lv_color_hex(model_hsv(s->hue, 100, 100)));
+                  ui_pastel(model_hsv(s->hue, 100, 100)));
     break;
   case MODE_KELVIN: {
     int k = clamp(s->kelvin, range.min, range.max);
     snprintf(text, sizeof text, "%d K", k);
     face_gradient(&face, (float)(k - range.min) / (range.max - range.min),
-                  kelvin_at, &range, lv_color_hex(model_kelvin_color(k)));
+                  kelvin_at, &range, ui_pastel(model_kelvin_color(k)));
     break;
   }
   }
-  face_set_value(&face, text);
+  face_set_value(&face, text,
+                 s->on ? COLOR_ON_SURFACE : COLOR_ON_SURFACE_VARIANT);
   face_set_dim(&face, !s->on);
   const char *glyph =
       *target ? icon_named(t.icon, s->on ? ICON_BULB : ICON_BULB_OFF)
               : (s->on ? ICON_GROUP : ICON_GROUP_OFF);
   face_set_icon(&face, glyph,
-                !s->available ? COLOR_FAINT
+                !s->available ? COLOR_OUTLINE_VARIANT
                 : s->on       ? tint
-                              : COLOR_MUTED);
+                              : COLOR_ON_SURFACE_VARIANT);
   face_set_name(&face, t.name);
   face_set_modes(&face, mode, modes);
 }
@@ -115,10 +117,25 @@ static int step_brightness(int v, int steps) {
   return clamp(v, 0, 100);
 }
 
+static int accelerate(int steps) {
+  static uint32_t last, pace = ACCEL_IDLE_MS;
+  static int direction;
+  uint32_t now = now_ms(), gap = (now - last) / abs(steps);
+  int sign = steps > 0 ? 1 : -1;
+  pace = gap > ACCEL_IDLE_MS || sign != direction ? ACCEL_IDLE_MS
+                                                  : (pace + gap) / 2;
+  last = now;
+  direction = sign;
+  return steps * (pace < ACCEL_QUADRUPLE_MS ? 4
+                  : pace < ACCEL_DOUBLE_MS  ? 2
+                                            : 1);
+}
+
 static void rotate(int steps) {
   target_t t;
   if (!model_target(target, &t))
     return;
+  steps = accelerate(steps);
   const light_state_t *s = &t.state;
   switch (mode) {
   case MODE_BRIGHTNESS:

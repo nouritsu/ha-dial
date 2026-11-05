@@ -23,7 +23,7 @@ in {
   env = {
     # toolchains, frameworks and libraries stay in .devenv/state
     PLATFORMIO_CORE_DIR = "${config.devenv.state}/platformio";
-    MONTSERRAT_DIR = "${pkgs.montserrat}/share/fonts/ttf";
+    ROBOTO_DIR = "${pkgs.roboto}/share/fonts/truetype";
     MDI_TTF = "${mdi}/fonts/materialdesignicons-webfont.ttf";
   };
 

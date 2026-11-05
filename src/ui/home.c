@@ -12,7 +12,10 @@
 
 #define MAX_ITEMS (MODEL_MAX_LIGHTS + MODEL_MAX_SCENES + 2)
 #define BUTTON_SIZE 46
-#define BUTTON_RADIUS 92
+#define BUTTON_RADIUS 90
+#define FOCUS_WIDTH 3
+#define FOCUS_GAP 2
+#define CENTER_WIDTH 124
 #define BUTTON_SPACING 38
 #define MIN_SPACING 37.5f
 #define ACTIVATED_MS 1500
@@ -49,19 +52,23 @@ static void on_center_click(lv_event_t *e) { activate(); }
 
 static void build(lv_obj_t *parent) {
   root = parent;
-  center = ui_label(root, &icons_72, COLOR_TEXT);
-  lv_obj_align(center, LV_ALIGN_TOP_MID, 0, 50);
+  center = lv_obj_create(root);
+  lv_obj_set_size(center, CENTER_WIDTH, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(center, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(center, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_row(center, 4, 0);
+  lv_obj_set_scrollable(center, false);
+  lv_obj_align(center, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_ext_click_area(center, 10);
   ui_on_click(center, on_center_click, NULL);
 
-  name = ui_label(root, &text_18, COLOR_TEXT);
-  lv_obj_set_width(name, 130);
-  lv_label_set_long_mode(name, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-  lv_obj_align(name, LV_ALIGN_TOP_MID, 0, 130);
+  name = ui_label(center, &text_20, COLOR_ON_SURFACE);
+  lv_obj_set_width(name, lv_pct(100));
+  lv_obj_set_style_text_line_space(name, -2, 0);
 
-  status = ui_label(root, &text_14, COLOR_MUTED);
-  lv_obj_set_width(status, 140);
-  lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 156);
+  status = ui_label(center, &text_16, COLOR_ON_SURFACE_VARIANT);
+  lv_obj_set_width(status, lv_pct(100));
 }
 
 static void add_item(item_kind_t kind, const char *id) {
@@ -70,8 +77,10 @@ static void add_item(item_kind_t kind, const char *id) {
   item_t *item = &items[item_count];
   item->kind = kind;
   strlcpy(item->id, id, sizeof item->id);
-  item->button = ui_circle(root, BUTTON_SIZE, COLOR_SURFACE);
-  item->glyph = ui_label(item->button, &icons_32, COLOR_TEXT);
+  item->button = ui_circle(root, BUTTON_SIZE, COLOR_SURFACE_CONTAINER_HIGHEST);
+  lv_obj_set_style_outline_color(item->button, COLOR_ON_SURFACE, 0);
+  lv_obj_set_style_outline_pad(item->button, FOCUS_GAP, 0);
+  item->glyph = ui_label(item->button, &icons_28, COLOR_ON_SURFACE_VARIANT);
   lv_obj_center(item->glyph);
   ui_on_click(item->button, on_item_click, (void *)(intptr_t)item_count);
   lv_obj_add_event_cb(item->button, on_item_long_press, LV_EVENT_LONG_PRESSED,
@@ -152,9 +161,9 @@ static void describe_light(const char *id, const char **glyph,
   const light_state_t *s = &t.state;
   *glyph = group ? (s->on ? ICON_GROUP : ICON_GROUP_OFF)
                  : icon_named(t.icon, s->on ? ICON_BULB : ICON_BULB_OFF);
-  *color = !s->available ? COLOR_FAINT
-           : s->on       ? lv_color_hex(model_tint(s))
-                         : COLOR_MUTED;
+  *color = !s->available ? COLOR_OUTLINE_VARIANT
+           : s->on       ? ui_pastel(model_tint(s))
+                         : COLOR_ON_SURFACE_VARIANT;
   if (!s->available) {
     snprintf(text, size, "Unavailable");
   } else if (group) {
@@ -189,39 +198,51 @@ static void refresh(void) {
   for (int i = 0; i < item_count; i++) {
     item_t *item = &items[i];
     const char *glyph = ICON_COG;
-    lv_color_t color = COLOR_TEXT, bg = COLOR_SURFACE;
+    lv_color_t color = COLOR_ON_SURFACE_VARIANT,
+               bg = COLOR_SURFACE_CONTAINER_HIGHEST;
     char unused[32];
     if (item->kind == ITEM_ALL || item->kind == ITEM_LIGHT) {
       describe_light(item->id, &glyph, &color, unused, sizeof unused);
       target_t t;
-      if (model_target(item->id, &t) && t.state.on && t.state.available)
-        bg = lv_color_mix(color, COLOR_SURFACE, 60);
+      bool available = model_target(item->id, &t) && t.state.available;
+      if (!available) {
+        bg = COLOR_SURFACE_CONTAINER;
+      } else if (t.state.on) {
+        bg = color;
+        color = ui_on_pastel(color);
+      }
     } else if (item->kind == ITEM_SCENE) {
       const scene_t *s = find_scene(item->id);
       glyph = icon_named(s ? s->icon : NULL, ICON_HUE);
+      color = COLOR_TERTIARY;
     }
     ui_set_text(item->glyph, glyph);
-    lv_obj_set_style_text_color(item->glyph, color, 0);
-    lv_obj_set_style_bg_color(item->button, bg, 0);
-    lv_obj_set_style_border_width(item->button, i == focus ? 3 : 0, 0);
+    ui_set_text_color(item->glyph, color);
+    ui_set_bg(item->button, bg, LV_OPA_COVER);
+    ui_set_outline(item->button, i == focus ? FOCUS_WIDTH : 0);
   }
 
   item_t *item = &items[focus];
-  const char *glyph = ICON_COG, *title = "Settings";
-  lv_color_t color = COLOR_TEXT;
+  const char *title = "Settings";
+  lv_color_t color = COLOR_ON_SURFACE_VARIANT;
   char text[48] = "";
   switch (item->kind) {
   case ITEM_ALL:
   case ITEM_LIGHT: {
     target_t t;
-    describe_light(item->id, &glyph, &color, text, sizeof text);
-    if (model_target(item->id, &t))
+    const char *glyph = NULL;
+    lv_color_t tint = color;
+    describe_light(item->id, &glyph, &tint, text, sizeof text);
+    if (model_target(item->id, &t)) {
       title = t.name;
+      if (t.state.available && t.state.on)
+        color = tint;
+    }
     break;
   }
   case ITEM_SCENE: {
     const scene_t *s = find_scene(item->id);
-    glyph = icon_named(s ? s->icon : NULL, ICON_HUE);
+    color = COLOR_TERTIARY;
     title = s ? s->name : item->id;
     bool recent =
         !strcmp(activated, item->id) && now_ms() - activated_at < ACTIVATED_MS;
@@ -230,7 +251,6 @@ static void refresh(void) {
   }
   case ITEM_SETTINGS:
     if (item_count == 1 || ha_link() != LINK_READY) {
-      glyph = ICON_HOME_ASSISTANT;
       title = "Home Assistant";
       if (ha_link() == LINK_AUTH_FAILED)
         color = COLOR_ERROR;
@@ -238,10 +258,11 @@ static void refresh(void) {
     }
     break;
   }
-  ui_set_text(center, glyph);
-  lv_obj_set_style_text_color(center, color, 0);
   ui_set_text(name, title);
   ui_set_text(status, text);
+  ui_set_text_color(status, color);
+  if (lv_obj_is_hidden(status) != !*text)
+    lv_obj_set_hidden(status, !*text);
 }
 
 static void expire_activated(lv_timer_t *timer) { model_changed(); }

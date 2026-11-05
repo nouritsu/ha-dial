@@ -38,9 +38,16 @@ lv_obj_t *ui_circle(lv_obj_t *parent, int size, lv_color_t color) {
   lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(obj, color, 0);
   lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(obj, COLOR_TEXT, 0);
   ui_inert(obj);
   return obj;
+}
+
+lv_color_t ui_pastel(uint32_t rgb) {
+  return lv_color_mix(lv_color_white(), lv_color_hex(rgb), 110);
+}
+
+lv_color_t ui_on_pastel(lv_color_t pastel) {
+  return lv_color_mix(pastel, lv_color_black(), 64);
 }
 
 void ui_inert(lv_obj_t *obj) {
@@ -53,10 +60,31 @@ void ui_set_text(lv_obj_t *label, const char *text) {
     lv_label_set_text(label, text);
 }
 
+// setting a style property redraws the object even when the value is the same
+
+void ui_set_text_color(lv_obj_t *obj, lv_color_t color) {
+  if (!lv_color_eq(lv_obj_get_style_text_color(obj, 0), color))
+    lv_obj_set_style_text_color(obj, color, 0);
+}
+
+void ui_set_bg(lv_obj_t *obj, lv_color_t color, lv_opa_t opa) {
+  if (!lv_color_eq(lv_obj_get_style_bg_color(obj, 0), color))
+    lv_obj_set_style_bg_color(obj, color, 0);
+  if (lv_obj_get_style_bg_opa(obj, 0) != opa)
+    lv_obj_set_style_bg_opa(obj, opa, 0);
+}
+
+void ui_set_outline(lv_obj_t *obj, int width) {
+  if (lv_obj_get_style_outline_width(obj, 0) != width)
+    lv_obj_set_style_outline_width(obj, width, 0);
+}
+
 void ui_place(lv_obj_t *obj, float degrees, float radius) {
   float rad = degrees * (float)M_PI / 180;
-  lv_obj_align(obj, LV_ALIGN_CENTER, (int)lroundf(radius * cosf(rad)),
-               (int)lroundf(radius * sinf(rad)));
+  int32_t x = lroundf(radius * cosf(rad)), y = lroundf(radius * sinf(rad));
+  if (lv_obj_get_style_align(obj, 0) != LV_ALIGN_CENTER ||
+      lv_obj_get_style_x(obj, 0) != x || lv_obj_get_style_y(obj, 0) != y)
+    lv_obj_align(obj, LV_ALIGN_CENTER, x, y);
 }
 
 void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data) {
