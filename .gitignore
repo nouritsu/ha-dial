@@ -1,0 +1,13 @@
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv
+.pre-commit-config.yaml
+.claude/settings.json
+.mcp.json
+.env
+.cache
+.clangd
+.pio
+compile_commands.json
+secrets.ini
