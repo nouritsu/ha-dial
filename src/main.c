@@ -1,12 +1,12 @@
 #include "actions.h"
 #include "app.h"
+#include "backend.h"
 #include "board.h"
 #include "config.h"
 #include "console.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "ha.h"
 #include "lvgl.h"
 #include "model.h"
 #include "net.h"
@@ -76,7 +76,7 @@ static void poll_button(void) {
 
 static void go_to_sleep(void) {
   ESP_LOGI(TAG, "sleeping");
-  ha_stop();
+  backend->stop();
   net_stop();
   board_sleep_display();
   if (!power_light_sleep(settings.power_off_after)) {
@@ -120,7 +120,7 @@ void app_main(void) {
   lv_refr_now(NULL);
   board_wake_display();
   net_init();
-  ha_init();
+  backend->init();
   net_start();
 
   for (;;) {
@@ -130,7 +130,7 @@ void app_main(void) {
       app_rotate(steps);
     console_loop();
     net_loop();
-    ha_loop();
+    backend->loop();
     actions_loop();
     model_loop();
     ui_loop();

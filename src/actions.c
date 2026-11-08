@@ -1,19 +1,19 @@
 #include "actions.h"
 
-#include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 
+#include "backend.h"
 #include "config.h"
-#include "ha.h"
 #include "model.h"
 
 #define QUEUE_SIZE 8
 
 typedef struct {
-  const char *domain;
-  const char *service;
+  bool scene;
+  prop_t prop;
+  int value;
   char target[MODEL_ID_LEN];
-  char data[48];
   int merge;
 } call_t;
 
@@ -30,51 +30,27 @@ static struct {
 static int in_flight;
 static uint32_t sent_at;
 
-static void enqueue(const char *domain, const char *service, const char *target,
-                    const char *data, int merge) {
+static void enqueue(const call_t *call) {
   call_t *last = queued ? &queue[queued - 1] : NULL;
-  if (!(merge && last && last->merge == merge &&
-        !strcmp(last->target, target))) {
+  if (!(call->merge && last && last->merge == call->merge &&
+        !strcmp(last->target, call->target))) {
     if (queued == QUEUE_SIZE)
       memmove(queue, queue + 1, sizeof(call_t) * --queued);
     last = &queue[queued++];
   }
-  last->domain = domain;
-  last->service = service;
-  last->merge = merge;
-  strlcpy(last->target, target, sizeof last->target);
-  strlcpy(last->data, data, sizeof last->data);
+  *last = *call;
+}
+
+static call_t make_call(bool scene, prop_t prop, int value, const char *target,
+                        int merge) {
+  call_t call = {.scene = scene, .prop = prop, .value = value, .merge = merge};
+  strlcpy(call.target, target, sizeof call.target);
+  return call;
 }
 
 static call_t pending_call(void) {
-  call_t call = {.domain = "light", .service = "turn_on"};
-  strlcpy(call.target, pending.target, sizeof call.target);
-  call.merge = pending.prop + 1;
-  float transition = TRANSITION_MS / 1000.0f;
-  switch (pending.prop) {
-  case PROP_BRIGHTNESS:
-    if (pending.value) {
-      snprintf(call.data, sizeof call.data,
-               "{\"brightness_pct\":%d,\"transition\":%.2f}", pending.value,
-               transition);
-    } else {
-      call.service = "turn_off";
-      snprintf(call.data, sizeof call.data, "{\"transition\":%.2f}",
-               transition);
-    }
-    break;
-  case PROP_HUE:
-    snprintf(call.data, sizeof call.data,
-             "{\"hs_color\":[%d,100],\"transition\":%.2f}", pending.value,
-             transition);
-    break;
-  case PROP_KELVIN:
-    snprintf(call.data, sizeof call.data,
-             "{\"color_temp_kelvin\":%d,\"transition\":%.2f}", pending.value,
-             transition);
-    break;
-  }
-  return call;
+  return make_call(false, pending.prop, pending.value, pending.target,
+                   pending.prop + 1);
 }
 
 static void queue_pending(void) {
@@ -82,7 +58,7 @@ static void queue_pending(void) {
     return;
   pending.active = false;
   call_t call = pending_call();
-  enqueue(call.domain, call.service, call.target, call.data, call.merge);
+  enqueue(&call);
 }
 
 static void hold(target_t *t) {
@@ -134,39 +110,38 @@ void actions_toggle(const char *target) {
   for (int i = 0; i < t.count; i++)
     t.lights[i]->state.on = on;
   hold(&t);
-  enqueue("light", on ? "turn_on" : "turn_off", target, "", 0);
+  call_t call = make_call(false, PROP_POWER, on, target, 0);
+  enqueue(&call);
   actions_loop();
 }
 
 void actions_scene(const char *id) {
   queue_pending();
-  enqueue("scene", "turn_on", id, "", 0);
+  call_t call = make_call(true, PROP_POWER, 1, id, 0);
+  enqueue(&call);
   actions_loop();
 }
 
 static int send(const call_t *call) {
+  if (call->scene)
+    return backend->scene(call->target);
   const char *ids[MODEL_MAX_LIGHTS];
-  int count = 0;
   target_t t;
-  if (strcmp(call->domain, "light")) {
-    ids[count++] = call->target;
-  } else if (model_target(call->target, &t)) {
-    for (; count < t.count; count++)
-      ids[count] = t.lights[count]->id;
-  }
-  return count ? ha_call(call->domain, call->service, ids, count,
-                         call->data[0] ? call->data : NULL)
-               : 0;
+  if (!model_target(call->target, &t))
+    return 0;
+  for (int i = 0; i < t.count; i++)
+    ids[i] = t.lights[i]->id;
+  return backend->set(ids, t.count, call->prop, call->value);
 }
 
 static bool busy(void) {
   uint32_t since = now_ms() - sent_at;
   return since < SEND_INTERVAL_MS ||
-         (ha_waiting(in_flight) && since < CALL_TIMEOUT_MS);
+         (backend->waiting(in_flight) && since < CALL_TIMEOUT_MS);
 }
 
 void actions_loop(void) {
-  if (ha_link() != LINK_READY)
+  if (backend->link() != LINK_READY)
     return;
   for (int i = 0; i < queued; i++)
     send(&queue[i]);

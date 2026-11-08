@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "actions.h"
+#include "backend.h"
 #include "config.h"
-#include "ha.h"
 #include "icons.h"
 #include "model.h"
 #include "screen.h"
@@ -182,15 +182,15 @@ static void describe_light(const char *id, const char **glyph,
 }
 
 static const char *link_status(void) {
-  switch (ha_link()) {
+  switch (backend->link()) {
   case LINK_OFFLINE:
     return "Joining Wi-Fi\u2026";
   case LINK_CONNECTING:
     return "Connecting\u2026";
   case LINK_AUTH_FAILED:
-    return "Token rejected";
+    return backend->rejected;
   default:
-    return "Label lights '" DIAL_LABEL "'";
+    return backend->empty;
   }
 }
 
@@ -250,9 +250,9 @@ static void refresh(void) {
     break;
   }
   case ITEM_SETTINGS:
-    if (item_count == 1 || ha_link() != LINK_READY) {
-      title = "Home Assistant";
-      if (ha_link() == LINK_AUTH_FAILED)
+    if (item_count == 1 || backend->link() != LINK_READY) {
+      title = backend->name;
+      if (backend->link() == LINK_AUTH_FAILED)
         color = COLOR_ERROR;
       snprintf(text, sizeof text, "%s", link_status());
     }

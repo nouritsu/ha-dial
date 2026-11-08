@@ -1,9 +1,8 @@
-#include "ha.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "backend.h"
 #include "cJSON.h"
 #include "config.h"
 #include "esp_log.h"
@@ -161,7 +160,7 @@ static void handle(const char *text) {
   cJSON_Delete(msg);
 }
 
-void ha_init(void) {
+static void ha_init(void) {
   static char uri[96];
   snprintf(uri, sizeof uri, "ws://%s:%d/api/websocket", HA_HOST, HA_PORT);
   inbox = xQueueCreate(16, sizeof(msg_t));
@@ -181,7 +180,7 @@ void ha_init(void) {
     state = LINK_AUTH_FAILED;
 }
 
-void ha_loop(void) {
+static void ha_loop(void) {
   if (state == LINK_AUTH_FAILED) {
     if (started)
       stop_client();
@@ -210,16 +209,16 @@ void ha_loop(void) {
   }
 }
 
-void ha_stop(void) {
+static void ha_stop(void) {
   stop_client();
   if (state != LINK_AUTH_FAILED)
     state = LINK_OFFLINE;
 }
 
-link_t ha_link(void) { return state; }
+static link_t ha_link(void) { return state; }
 
-int ha_call(const char *domain, const char *service, const char *const *ids,
-            int count, const char *data) {
+static int call(const char *domain, const char *service, const char *const *ids,
+                int count, const char *data) {
   int id;
   cJSON *root = command("call_service", &id);
   cJSON_AddStringToObject(root, "domain", domain);
@@ -233,4 +232,48 @@ int ha_call(const char *domain, const char *service, const char *const *ids,
   return send_json(root) ? id : 0;
 }
 
-bool ha_waiting(int id) { return id > answered; }
+static int ha_set(const char *const *ids, int count, prop_t prop, int value) {
+  float transition = TRANSITION_MS / 1000.0f;
+  char data[64];
+  switch (prop) {
+  case PROP_POWER:
+    return call("light", value ? "turn_on" : "turn_off", ids, count, NULL);
+  case PROP_BRIGHTNESS:
+    if (!value) {
+      snprintf(data, sizeof data, "{\"transition\":%.2f}", transition);
+      return call("light", "turn_off", ids, count, data);
+    }
+    snprintf(data, sizeof data, "{\"brightness_pct\":%d,\"transition\":%.2f}",
+             value, transition);
+    break;
+  case PROP_HUE:
+    snprintf(data, sizeof data, "{\"hs_color\":[%d,100],\"transition\":%.2f}",
+             value, transition);
+    break;
+  case PROP_KELVIN:
+    snprintf(data, sizeof data,
+             "{\"color_temp_kelvin\":%d,\"transition\":%.2f}", value,
+             transition);
+    break;
+  }
+  return call("light", "turn_on", ids, count, data);
+}
+
+static int ha_scene(const char *id) {
+  return call("scene", "turn_on", &id, 1, NULL);
+}
+
+static bool ha_waiting(int id) { return id > answered; }
+
+const backend_t ha_backend = {
+    .name = "Home Assistant",
+    .rejected = "Token rejected",
+    .empty = "Label lights '" DIAL_LABEL "'",
+    .init = ha_init,
+    .loop = ha_loop,
+    .stop = ha_stop,
+    .link = ha_link,
+    .set = ha_set,
+    .scene = ha_scene,
+    .waiting = ha_waiting,
+};

@@ -72,6 +72,10 @@ void model_loop(void);
 void model_set_entities(const cJSON *ids);
 void model_apply_event(const cJSON *event);
 
+// takes on l->remote unless the user is still adjusting the light
+void model_apply_remote(light_t *l);
+void model_sort(void);
+
 light_t *model_light(const char *id);
 bool model_target(const char *id, target_t *out);
 

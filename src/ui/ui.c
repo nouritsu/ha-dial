@@ -3,9 +3,9 @@
 #include <math.h>
 #include <string.h>
 
+#include "backend.h"
 #include "board.h"
 #include "config.h"
-#include "ha.h"
 #include "model.h"
 #include "screen.h"
 #include "settings.h"
@@ -101,7 +101,7 @@ static lv_obj_t *make_screen(void) {
 }
 
 static void update_rim(void) {
-  link_t link = ha_link();
+  link_t link = backend->link();
   bool show = link == LINK_AUTH_FAILED ||
               (link != LINK_READY && now_ms() - link_changed_at > 1500);
   if (show)
@@ -134,8 +134,8 @@ void ui_loop(void) {
     home_relayout();
     seen_revision = 0;
   }
-  if ((int)ha_link() != seen_link) {
-    seen_link = ha_link();
+  if ((int)backend->link() != seen_link) {
+    seen_link = backend->link();
     link_changed_at = now_ms();
     seen_revision = 0;
   }

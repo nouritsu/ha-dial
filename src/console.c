@@ -7,17 +7,17 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "backend.h"
 #include "board.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
-#include "ha.h"
 #include "model.h"
 #include "ui/ui.h"
 
 static void print_state(void) {
-  printf("link=%d screen=%d heap=%u min=%u\n", ha_link(), ui_current(),
+  printf("link=%d screen=%d heap=%u min=%u\n", backend->link(), ui_current(),
          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
   for (int i = 0; i < model_light_count; i++) {

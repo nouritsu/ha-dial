@@ -82,6 +82,14 @@ void model_set_entities(const cJSON *ids) {
   revision++;
 }
 
+void model_apply_remote(light_t *l) {
+  if (now_ms() >= l->hold_until) {
+    l->state = l->remote;
+    l->hold_until = 0;
+  }
+  revision++;
+}
+
 static void apply_light(light_t *l, const cJSON *state, const cJSON *a) {
   light_state_t *r = &l->remote;
   if (cJSON_IsString(state)) {
@@ -123,10 +131,7 @@ static void apply_light(light_t *l, const cJSON *state, const cJSON *a) {
     if (cJSON_IsString(v = get(a, "color_mode")))
       r->color_temp = !strcmp(v->valuestring, "color_temp");
   }
-  if (now_ms() >= l->hold_until) {
-    l->state = l->remote;
-    l->hold_until = 0;
-  }
+  model_apply_remote(l);
 }
 
 static void apply_scene(scene_t *s, const cJSON *a) {
@@ -169,15 +174,18 @@ static int by_scene_name(const void *a, const void *b) {
   return strcasecmp(((const scene_t *)a)->name, ((const scene_t *)b)->name);
 }
 
+void model_sort(void) {
+  qsort(model_lights, model_light_count, sizeof(light_t), by_light_name);
+  qsort(model_scenes, model_scene_count, sizeof(scene_t), by_scene_name);
+  layout++;
+}
+
 void model_apply_event(const cJSON *event) {
   const cJSON *added = get(event, "a"), *changes = get(event, "c"), *item;
   cJSON_ArrayForEach(item, added) apply(item->string, item);
   cJSON_ArrayForEach(item, changes) apply(item->string, get(item, "+"));
-  if (cJSON_GetArraySize(added) > 0) {
-    qsort(model_lights, model_light_count, sizeof(light_t), by_light_name);
-    qsort(model_scenes, model_scene_count, sizeof(scene_t), by_scene_name);
-    layout++;
-  }
+  if (cJSON_GetArraySize(added) > 0)
+    model_sort();
   revision++;
 }
 
