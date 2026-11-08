@@ -9,6 +9,7 @@ settings_t settings = {
     .clock_after = 10,
     .sleep_after = 30,
     .power_off_after = 30,
+    .bulb_refresh = 2,
 };
 
 static settings_t saved;
@@ -17,9 +18,14 @@ static const struct {
   const char *key;
   uint16_t *value;
 } fields[] = {
-    {"bright", &settings.brightness}, {"clock", &settings.clock_after},
-    {"sleep", &settings.sleep_after}, {"off", &settings.power_off_after},
+    {"bright", &settings.brightness},     {"clock", &settings.clock_after},
+    {"sleep", &settings.sleep_after},     {"off", &settings.power_off_after},
     {"rot", &settings.rotation},
+// only a Tapo build has these on its settings screen, so any other build keeps
+// the defaults rather than whatever a Tapo build saved
+#ifdef BACKEND_TAPO
+    {"hide", &settings.hide_unavailable}, {"refresh", &settings.bulb_refresh},
+#endif
 };
 
 void settings_load(void) {

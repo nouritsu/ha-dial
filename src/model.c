@@ -6,6 +6,7 @@
 #include <strings.h>
 
 #include "config.h"
+#include "settings.h"
 
 #define get cJSON_GetObjectItemCaseSensitive
 
@@ -201,8 +202,13 @@ void model_apply_event(const cJSON *event) {
   revision++;
 }
 
+bool model_shown(const light_t *l) {
+  return l->state.available || !settings.hide_unavailable;
+}
+
 void model_loop(void) {
-  uint32_t now = now_ms();
+  static uint32_t shown;
+  uint32_t now = now_ms(), now_shown = 0;
   for (int i = 0; i < model_light_count; i++) {
     light_t *l = &model_lights[i];
     if (l->hold_until && now >= l->hold_until) {
@@ -210,6 +216,11 @@ void model_loop(void) {
       l->hold_until = 0;
       revision++;
     }
+    now_shown |= (uint32_t)model_shown(l) << i;
+  }
+  if (now_shown != shown) {
+    shown = now_shown;
+    layout++;
   }
 }
 
@@ -217,7 +228,7 @@ bool model_target(const char *id, target_t *out) {
   *out = (target_t){0};
   if (id && *id) {
     light_t *l = model_light(id);
-    if (!l)
+    if (!l || !model_shown(l))
       return false;
     out->lights[0] = l;
     out->count = 1;
@@ -230,12 +241,12 @@ bool model_target(const char *id, target_t *out) {
     out->has_temp = l->has_temp;
     return true;
   }
-  if (!model_light_count)
-    return false;
   light_t *lead = NULL;
   int min_kelvin = 0, max_kelvin = 65535, brightness = 0, on_brightness = 0;
   for (int i = 0; i < model_light_count; i++) {
     light_t *l = &model_lights[i];
+    if (!model_shown(l))
+      continue;
     out->lights[out->count++] = l;
     if (l->state.on && !lead)
       lead = l;
@@ -252,6 +263,8 @@ bool model_target(const char *id, target_t *out) {
     if (l->max_kelvin < max_kelvin)
       max_kelvin = l->max_kelvin;
   }
+  if (!out->count)
+    return false;
   if (!lead)
     lead = out->lights[0];
   out->name = "All lights";

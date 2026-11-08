@@ -8,6 +8,8 @@ typedef struct {
   uint16_t sleep_after;
   uint16_t power_off_after;
   uint16_t rotation;
+  uint16_t hide_unavailable;
+  uint16_t bulb_refresh;
 } settings_t;
 
 extern settings_t settings;

@@ -18,6 +18,7 @@
 #include "mbedtls/sha256.h"
 #include "model.h"
 #include "net.h"
+#include "settings.h"
 
 #define get cJSON_GetObjectItemCaseSensitive
 
@@ -27,7 +28,7 @@
 #define RESPONSE_SIZE 4096
 #define SIGNATURE_LEN 32
 #define FAILURES_UNTIL_UNAVAILABLE 2
-#define UNAVAILABLE_POLL_MS (TAPO_POLL_MS * 5)
+#define UNAVAILABLE_POLL_MS 10000
 // bulbs drop a session after a day, by a clock that is not very accurate
 #define SESSION_MS ((86400u - 20 * 60) * 1000)
 #define SESSION_TIMEOUT_ERROR 9999
@@ -435,6 +436,9 @@ static void apply_patch(light_state_t *s, const patch_t *p) {
   }
 }
 
+// Tapo bulbs never report changes on their own, so they are asked this often
+static uint32_t poll_ms(void) { return settings.bulb_refresh * 1000u; }
+
 static void handle(const report_t *r) {
   bulb_t *b = &bulbs[r->bulb];
   b->busy = false;
@@ -442,7 +446,7 @@ static void handle(const report_t *r) {
   // a request that sleep cut off says nothing about the bulb
   if (!started || !l)
     return;
-  b->poll_at = now_ms() + TAPO_POLL_MS;
+  b->poll_at = now_ms() + poll_ms();
   if (r->result == RESULT_REJECTED) {
     ESP_LOGE(TAG, "%s rejected the login", b->host);
     b->rejected = true;
@@ -459,7 +463,9 @@ static void handle(const report_t *r) {
       model_apply_remote(l);
     }
     if (b->failures >= FAILURES_UNTIL_UNAVAILABLE)
-      b->poll_at = now_ms() + UNAVAILABLE_POLL_MS;
+      b->poll_at =
+          now_ms() +
+          (poll_ms() > UNAVAILABLE_POLL_MS ? poll_ms() : UNAVAILABLE_POLL_MS);
     return;
   }
 

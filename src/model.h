@@ -80,6 +80,9 @@ void model_apply_remote(light_t *l);
 void model_sort(void);
 
 light_t *model_light(const char *id);
+// false for an unavailable light while the setting hides those
+bool model_shown(const light_t *l);
+// covers only the lights that are shown
 bool model_target(const char *id, target_t *out);
 
 int model_percent(const light_state_t *s);

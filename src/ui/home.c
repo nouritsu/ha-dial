@@ -130,10 +130,12 @@ void home_relayout(void) {
   for (int i = 0; i < item_count; i++)
     lv_obj_delete(items[i].button);
   item_count = 0;
-  if (model_light_count)
+  target_t all;
+  if (model_target("", &all))
     add_item(ITEM_ALL, "");
   for (int i = 0; i < model_light_count; i++)
-    add_item(ITEM_LIGHT, model_lights[i].id);
+    if (model_shown(&model_lights[i]))
+      add_item(ITEM_LIGHT, model_lights[i].id);
   for (int i = 0; i < model_scene_count; i++)
     add_item(ITEM_SCENE, model_scenes[i].id);
   add_item(ITEM_SETTINGS, "");
