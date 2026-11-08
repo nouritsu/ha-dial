@@ -18,6 +18,7 @@ typedef struct {
   const char *empty;
   // the optional SETTING_ values it shows on the settings screen
   unsigned settings;
+  // all of these run on the main task, the only one that may touch the model
   void (*init)(void);
   void (*loop)(void);
   void (*stop)(void);
@@ -29,10 +30,7 @@ typedef struct {
   bool (*waiting)(int id);
 } backend_t;
 
-extern const backend_t ha_backend, tapo_backend;
-
-#ifdef BACKEND_TAPO
-#define backend (&tapo_backend)
-#else
-#define backend (&ha_backend)
-#endif
+// `backend = <name>` in secrets.ini picks <name>_backend from
+// backends/<name>.c; every backend is compiled, and the linker drops the rest
+extern const backend_t DIAL_BACKEND;
+#define backend (&DIAL_BACKEND)

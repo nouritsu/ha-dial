@@ -5,30 +5,36 @@ from pathlib import Path
 Import("env")  # noqa: F821
 
 OPTIONAL = {"static_ip", "gateway", "subnet", "dns"}
-# both backends are always compiled, so the other one's settings need values too
-DEFAULTS = {"backend": "ha", "ha_host": "", "ha_port": "8123", "ha_token": "", "tapo_hosts": ""}
+# every backend in src/backends is compiled, so the keys of the ones not picked
+# need values too
+BACKEND_KEYS = {
+    "ha": {"ha_host": "", "ha_port": "8123", "ha_token": ""},
+    "tapo": {"tapo_hosts": ""},
+}
 LOGIN = {"tapo_username", "tapo_password"}
 
-path = Path(env.subst("$PROJECT_DIR")) / "secrets.ini"  # noqa: F821
+project = Path(env.subst("$PROJECT_DIR"))  # noqa: F821
+path = project / "secrets.ini"
 if not path.exists():
     raise SystemExit(f"{path} is missing: copy secrets.example.ini and fill it in")
 
 parser = configparser.ConfigParser(interpolation=None)
 parser.read(path)
 secrets = dict(parser["secrets"])
-for key, default in DEFAULTS.items():
-    secrets[key] = secrets.get(key) or default
-if secrets["backend"] not in {"ha", "tapo"}:
-    raise SystemExit(f"{path}: backend must be ha or tapo, not {secrets['backend']}")
+backend = secrets.pop("backend", "") or "ha"
+backends = sorted(p.stem for p in (project / "src" / "backends").glob("*.c"))
+if backend not in backends:
+    raise SystemExit(f"{path}: backend must be one of {', '.join(backends)}, not {backend}")
+env.Append(CPPDEFINES=[("DIAL_BACKEND", f"{backend}_backend")])  # noqa: F821
+for keys in BACKEND_KEYS.values():
+    for key, default in keys.items():
+        secrets[key] = secrets.get(key) or default
 
 for key, value in secrets.items():
-    if key == "backend" or key in LOGIN or (key in OPTIONAL and not value):
+    if key in LOGIN or (key in OPTIONAL and not value):
         continue
     macro = value if value.isdigit() else env.StringifyMacro(value)  # noqa: F821
     env.Append(CPPDEFINES=[(key.upper(), macro)])  # noqa: F821
-
-if secrets["backend"] == "tapo":
-    env.Append(CPPDEFINES=["BACKEND_TAPO"])  # noqa: F821
 
 # the bulbs only ever see this hash of the TP-Link login, so the password
 # itself stays out of the firmware
