@@ -242,25 +242,35 @@ static void init_i2c(void) {
   i2c_master_bus_rm_device(rfid);
 }
 
+// leaves x and y alone when nothing is touching the panel
+static bool read_finger(int *x, int *y) {
+  uint8_t reg = 0x02, buf[5];
+  if (i2c_master_transmit_receive(touch_dev, &reg, 1, buf, sizeof buf, 20) !=
+      ESP_OK)
+    return false;
+  int touches = buf[0] & 0x0F;
+  if (touches != 1 && touches != 2)
+    return false;
+  *x = (buf[1] & 0x0F) << 8 | buf[2];
+  *y = (buf[3] & 0x0F) << 8 | buf[4];
+  return true;
+}
+
+bool board_touched(void) {
+  int x, y;
+  return read_finger(&x, &y);
+}
+
 static void read_touch(lv_indev_t *indev, lv_indev_data_t *data) {
   static int x, y;
-  bool pressed = false;
+  bool pressed;
   if (injected.until && now_ms() < injected.until) {
     pressed = true;
     x = injected.x;
     y = injected.y;
   } else {
-    uint8_t reg = 0x02, buf[5];
     injected.until = 0;
-    if (i2c_master_transmit_receive(touch_dev, &reg, 1, buf, sizeof buf, 20) ==
-        ESP_OK) {
-      int touches = buf[0] & 0x0F;
-      if (touches == 1 || touches == 2) {
-        pressed = true;
-        x = (buf[1] & 0x0F) << 8 | buf[2];
-        y = (buf[3] & 0x0F) << 8 | buf[4];
-      }
-    }
+    pressed = read_finger(&x, &y);
   }
   if (touch_held) {
     touch_held = pressed;

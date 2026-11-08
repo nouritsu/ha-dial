@@ -5,6 +5,7 @@
 #include "config.h"
 #include "console.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
@@ -83,9 +84,11 @@ static void go_to_sleep(void) {
     ESP_LOGI(TAG, "powering off");
     power_off();
   }
+  // a tap wakes to the clock, the knob and the button straight to the lights
+  bool tapped = board_touched() && !board_button_down();
   board_ignore_held_input();
   ignore_button = board_button_down();
-  ui_show(SCREEN_HOME, NULL);
+  ui_show(tapped ? SCREEN_CLOCK : SCREEN_HOME, NULL);
   lv_refr_now(NULL);
   board_wake_display();
   lv_display_trigger_activity(NULL);
@@ -117,9 +120,16 @@ void app_main(void) {
   board_set_rotation(settings.rotation);
   console_init();
   ui_init();
+  // restores the time from the RTC, which the clock needs for its first frame
+  net_init();
+  // a tap that woke the Dial from power off on USB shows the clock, as one
+  // that wakes it from sleep does
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+    board_ignore_held_input();
+    ui_show(SCREEN_CLOCK, NULL);
+  }
   lv_refr_now(NULL);
   board_wake_display();
-  net_init();
   backend->init();
   net_start();
 

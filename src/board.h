@@ -14,6 +14,7 @@ void board_init(void);
 
 int board_take_steps(void);
 bool board_button_down(void);
+bool board_touched(void);
 
 void board_set_backlight(int percent);
 void board_set_rotation(int degrees);
