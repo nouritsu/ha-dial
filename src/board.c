@@ -22,6 +22,8 @@
 #define BUFFER_BYTES (WIDTH * 40 * 2)
 #define CAPTURE_CHUNK 768
 #define COLOR_FORMAT LV_COLOR_FORMAT_RGB565
+#define CLICK_HZ 4000
+#define CLICK_MS 8
 
 #define PIN_BUZZER 3
 #define PIN_LCD_DC 4
@@ -43,6 +45,8 @@ static pcnt_unit_handle_t encoder;
 static int encoder_last, encoder_remainder;
 static int backlight;
 static bool asleep = true, touch_held, capturing;
+static lv_indev_t *touch;
+static esp_timer_handle_t click_timer;
 static struct {
   int x, y;
   uint32_t until;
@@ -92,6 +96,37 @@ void board_set_backlight(int percent) {
   backlight = percent;
   if (!asleep)
     apply_backlight(percent);
+}
+
+static void end_click(void *arg) {
+  ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
+}
+
+static void init_buzzer(void) {
+  ledc_timer_config_t timer = {
+      .speed_mode = LEDC_LOW_SPEED_MODE,
+      .duty_resolution = LEDC_TIMER_8_BIT,
+      .timer_num = LEDC_TIMER_1,
+      .freq_hz = CLICK_HZ,
+      .clk_cfg = LEDC_AUTO_CLK,
+  };
+  ESP_ERROR_CHECK(ledc_timer_config(&timer));
+  ledc_channel_config_t channel = {
+      .gpio_num = PIN_BUZZER,
+      .speed_mode = LEDC_LOW_SPEED_MODE,
+      .channel = LEDC_CHANNEL_1,
+      .timer_sel = LEDC_TIMER_1,
+  };
+  ESP_ERROR_CHECK(ledc_channel_config(&channel));
+  esp_timer_create_args_t args = {.callback = end_click, .name = "click"};
+  ESP_ERROR_CHECK(esp_timer_create(&args, &click_timer));
+}
+
+void board_click(void) {
+  ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 128);
+  ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+  esp_timer_stop(click_timer);
+  esp_timer_start_once(click_timer, CLICK_MS * 1000);
 }
 
 void board_sleep_display(void) {
@@ -282,10 +317,18 @@ static void read_touch(lv_indev_t *indev, lv_indev_data_t *data) {
 }
 
 static void init_touch(void) {
-  lv_indev_t *indev = lv_indev_create();
-  lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-  lv_indev_set_read_cb(indev, read_touch);
-  lv_indev_set_long_press_time(indev, LONG_PRESS_MS);
+  touch = lv_indev_create();
+  lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(touch, read_touch);
+  lv_indev_set_long_press_time(touch, LONG_PRESS_MS);
+}
+
+void board_set_touch(bool on) {
+  if (!on)
+    lv_indev_reset(touch, NULL);
+  // a finger already down when touch comes back is ignored until it lifts
+  touch_held = on;
+  lv_indev_enable(touch, on);
 }
 
 static void init_encoder(void) {
@@ -398,6 +441,7 @@ void board_rtc_write(time_t utc) {
 void board_init(void) {
   init_gpio();
   init_backlight();
+  init_buzzer();
   lv_init();
   lv_tick_set_cb(now_ms);
   init_display();

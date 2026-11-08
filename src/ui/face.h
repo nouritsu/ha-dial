@@ -5,7 +5,7 @@
 
 #include "lvgl.h"
 
-#define FACE_MAX_MODES 8
+#define FACE_MAX_MODES 12
 
 typedef lv_color_t (*face_color_fn)(float t, const void *ctx);
 

@@ -87,8 +87,17 @@ void ui_place(lv_obj_t *obj, float degrees, float radius) {
     lv_obj_align(obj, LV_ALIGN_CENTER, x, y);
 }
 
+void ui_sound(bool knob) {
+  if (settings.clicks == CLICKS_ALL ||
+      (settings.clicks == CLICKS_TOUCH && !knob))
+    board_click();
+}
+
+static void on_tap_sound(lv_event_t *e) { ui_sound(false); }
+
 void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data) {
   lv_obj_set_clickable(obj, true);
+  lv_obj_add_event_cb(obj, on_tap_sound, LV_EVENT_SHORT_CLICKED, NULL);
   lv_obj_add_event_cb(obj, cb, LV_EVENT_SHORT_CLICKED, user_data);
 }
 
@@ -168,8 +177,10 @@ void ui_show(screen_id_t id, const char *target) {
 screen_id_t ui_current(void) { return current; }
 
 void ui_rotate(int steps) {
-  if (screens[current]->rotate)
-    screens[current]->rotate(steps);
+  if (!screens[current]->rotate)
+    return;
+  ui_sound(true);
+  screens[current]->rotate(steps);
 }
 
 void ui_click(void) {

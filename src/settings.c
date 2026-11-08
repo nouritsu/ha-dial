@@ -10,6 +10,8 @@ settings_t settings = {
     .clock_after = 10,
     .sleep_after = 30,
     .power_off_after = 30,
+    .touch = 1,
+    .clicks = CLICKS_TOUCH,
     .bulb_refresh = 2,
 };
 
@@ -25,6 +27,8 @@ static const struct {
     {"sleep", &settings.sleep_after},
     {"off", &settings.power_off_after},
     {"rot", &settings.rotation},
+    {"touch", &settings.touch},
+    {"clicks", &settings.clicks},
     {"hide", &settings.hide_unavailable, SETTING_HIDE_UNAVAILABLE},
     {"refresh", &settings.bulb_refresh, SETTING_BULB_REFRESH},
 };

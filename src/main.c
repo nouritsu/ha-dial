@@ -80,12 +80,12 @@ static void go_to_sleep(void) {
   backend->stop();
   net_stop();
   board_sleep_display();
-  if (!power_light_sleep(settings.power_off_after)) {
+  if (!power_light_sleep(settings.power_off_after, settings.touch)) {
     ESP_LOGI(TAG, "powering off");
-    power_off();
+    power_off(settings.touch);
   }
   // a tap wakes to the clock, the knob and the button straight to the lights
-  bool tapped = board_touched() && !board_button_down();
+  bool tapped = settings.touch && board_touched() && !board_button_down();
   board_ignore_held_input();
   ignore_button = board_button_down();
   ui_show(tapped ? SCREEN_CLOCK : SCREEN_HOME, NULL);
@@ -118,6 +118,7 @@ void app_main(void) {
   board_init();
   settings_load();
   board_set_rotation(settings.rotation);
+  board_set_touch(settings.touch);
   console_init();
   ui_init();
   // restores the time from the RTC, which the clock needs for its first frame

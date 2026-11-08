@@ -9,9 +9,14 @@ typedef struct {
   uint16_t sleep_after;
   uint16_t power_off_after;
   uint16_t rotation;
+  uint16_t touch;
+  uint16_t clicks;
   uint16_t hide_unavailable;
   uint16_t bulb_refresh;
 } settings_t;
+
+// what the buzzer clicks for
+enum { CLICKS_OFF, CLICKS_TOUCH, CLICKS_ALL };
 
 // settings that only some backends have use for; a backend lists the ones it
 // offers in backend_t.settings, and the others keep their defaults whatever

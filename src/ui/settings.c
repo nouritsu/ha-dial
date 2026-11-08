@@ -28,6 +28,10 @@ static const uint16_t clock_choices[] = {5, 10, 15, 30, 60, 0};
 static const uint16_t sleep_choices[] = {15, 30, 60, 120, 300, 0};
 static const uint16_t power_off_choices[] = {10, 30, 60, 120, 360, 0};
 static const uint16_t rotation_choices[] = {0, 90, 180, 270};
+static const uint16_t touch_choices[] = {0, 1};
+static const char *const touch_labels[] = {"Off", "On"};
+static const uint16_t click_choices[] = {CLICKS_OFF, CLICKS_TOUCH, CLICKS_ALL};
+static const char *const click_labels[] = {"Off", "Touch", "All"};
 static const uint16_t hide_choices[] = {0, 1};
 static const char *const hide_labels[] = {"Show", "Hide"};
 static const uint16_t refresh_choices[] = {1, 2, 5, 10, 30};
@@ -45,6 +49,10 @@ static const option_t options[] = {
      CHOICES(power_off_choices), .unit = UNIT_MINUTES},
     {"Rotation", ICON_ROTATION, &settings.rotation, CHOICES(rotation_choices),
      .unit = UNIT_DEGREES},
+    {"Touchscreen", ICON_TOUCH, &settings.touch, CHOICES(touch_choices),
+     .labels = touch_labels},
+    {"Click sounds", ICON_CLICKS, &settings.clicks, CHOICES(click_choices),
+     .labels = click_labels},
     {"Unavailable bulbs", ICON_EYE_OFF, &settings.hide_unavailable,
      CHOICES(hide_choices), .labels = hide_labels,
      .optional = SETTING_HIDE_UNAVAILABLE},
@@ -54,6 +62,7 @@ static const option_t options[] = {
 };
 
 #define OPTION_COUNT (int)(sizeof options / sizeof *options)
+_Static_assert(OPTION_COUNT <= FACE_MAX_MODES, "a dot for every option");
 
 static face_t face;
 // the options this backend offers, in table order
@@ -121,6 +130,8 @@ static void rotate(int steps) {
     board_set_backlight(settings.brightness);
   if (o->value == &settings.rotation)
     board_set_rotation(settings.rotation);
+  if (o->value == &settings.touch)
+    board_set_touch(settings.touch);
   refresh();
 }
 
