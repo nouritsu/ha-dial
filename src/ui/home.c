@@ -164,6 +164,11 @@ static void place_items(void) {
     lights += items[i].kind == ITEM_ALL || items[i].kind == ITEM_LIGHT;
     scenes += items[i].kind == ITEM_SCENE;
   }
+  // settings sits across from the middle of the lights, and the scenes halfway
+  // round from the last light to it, so the ring runs in the knob's order
+  float middle = lights ? -90 + BUTTON_SPACING * (lights - 1) / 2.0f : 0;
+  float last = lights ? -90 + BUTTON_SPACING * (lights - 1) : 0;
+  float across = middle + 180, between = (last + across) / 2;
   for (int i = 0; i < item_count; i++) {
     switch (items[i].kind) {
     case ITEM_ALL:
@@ -171,10 +176,11 @@ static void place_items(void) {
       items[i].angle = -90 + BUTTON_SPACING * i;
       break;
     case ITEM_SCENE:
-      items[i].angle = 90 + BUTTON_SPACING * (scene++ - (scenes - 1) / 2.0f);
+      items[i].angle =
+          between + BUTTON_SPACING * (scene++ - (scenes - 1) / 2.0f);
       break;
     case ITEM_SETTINGS:
-      items[i].angle = 180;
+      items[i].angle = across;
       break;
     }
   }
