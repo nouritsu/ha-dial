@@ -4,6 +4,8 @@
 
 #include "esp_timer.h"
 
+// Home Assistant only: the label that picks the lights and scenes, and the
+// weather entity for the clock face
 #define DIAL_LABEL "dial"
 #define DIAL_WEATHER "weather.forecast_home"
 #define DIAL_TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3"
@@ -23,7 +25,8 @@
 #define ACCEL_QUADRUPLE_MS 30
 #define ACCEL_IDLE_MS 200
 
-// a new value goes out as soon as HA has finished applying the previous one
+// a new value goes out as soon as the backend has finished applying the
+// previous one
 #define SEND_INTERVAL_MS 50
 #define CALL_TIMEOUT_MS 3000
 #define TRANSITION_MS 300

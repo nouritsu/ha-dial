@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,6 +93,129 @@ static cJSON *command(const char *type, int *id) {
   return root;
 }
 
+static void copy_string(char *dst, size_t size, const cJSON *v) {
+  if (cJSON_IsString(v))
+    strlcpy(dst, v->valuestring, size);
+}
+
+static bool has_prefix(const char *s, const char *prefix) {
+  return !strncmp(s, prefix, strlen(prefix));
+}
+
+static void set_entities(const cJSON *ids) {
+  static light_t lights[MODEL_MAX_LIGHTS];
+  static scene_t scenes[MODEL_MAX_SCENES];
+  int light_count = 0, scene_count = 0;
+  const cJSON *item;
+  cJSON_ArrayForEach(item, ids) {
+    if (!cJSON_IsString(item))
+      continue;
+    const char *id = item->valuestring;
+    if (has_prefix(id, "light.") && light_count < MODEL_MAX_LIGHTS) {
+      light_t *old = model_light(id), *l = &lights[light_count++];
+      if (old)
+        *l = *old;
+      else
+        model_new_light(l, id, id + 6);
+    } else if (has_prefix(id, "scene.") && scene_count < MODEL_MAX_SCENES) {
+      scene_t *old = model_scene(id), *s = &scenes[scene_count++];
+      if (old) {
+        *s = *old;
+      } else {
+        *s = (scene_t){0};
+        strlcpy(s->id, id, sizeof s->id);
+        strlcpy(s->name, id + 6, sizeof s->name);
+      }
+    }
+  }
+  model_replace(lights, light_count, scenes, scene_count);
+}
+
+static void apply_light(light_t *l, const cJSON *state, const cJSON *a) {
+  light_state_t *r = &l->remote;
+  if (cJSON_IsString(state)) {
+    r->on = !strcmp(state->valuestring, "on");
+    r->available = strcmp(state->valuestring, "unavailable") != 0;
+  }
+  if (cJSON_IsObject(a)) {
+    const cJSON *v;
+    copy_string(l->name, sizeof l->name, get(a, "friendly_name"));
+    copy_string(l->icon, sizeof l->icon, get(a, "icon"));
+    if (cJSON_IsNumber(v = get(a, "min_color_temp_kelvin")))
+      l->min_kelvin = v->valueint;
+    if (cJSON_IsNumber(v = get(a, "max_color_temp_kelvin")))
+      l->max_kelvin = v->valueint;
+    if (cJSON_IsArray(v = get(a, "supported_color_modes"))) {
+      l->has_color = l->has_temp = false;
+      const cJSON *mode;
+      cJSON_ArrayForEach(mode, v) {
+        if (!cJSON_IsString(mode))
+          continue;
+        const char *m = mode->valuestring;
+        if (!strcmp(m, "color_temp"))
+          l->has_temp = true;
+        else if (strcmp(m, "onoff") && strcmp(m, "brightness") &&
+                 strcmp(m, "white"))
+          l->has_color = true;
+      }
+    }
+    if (cJSON_IsNumber(v = get(a, "brightness")))
+      r->brightness = v->valueint;
+    if (cJSON_IsArray(v = get(a, "hs_color")) && cJSON_GetArraySize(v) == 2) {
+      r->hue =
+          (uint16_t)lroundf((float)cJSON_GetArrayItem(v, 0)->valuedouble) % 360;
+      r->saturation =
+          (uint8_t)lroundf((float)cJSON_GetArrayItem(v, 1)->valuedouble);
+    }
+    if (cJSON_IsNumber(v = get(a, "color_temp_kelvin")))
+      r->kelvin = v->valueint;
+    if (cJSON_IsString(v = get(a, "color_mode")))
+      r->color_temp = !strcmp(v->valuestring, "color_temp");
+  }
+  model_apply_remote(l);
+}
+
+static void apply_scene(scene_t *s, const cJSON *a) {
+  if (!cJSON_IsObject(a))
+    return;
+  copy_string(s->name, sizeof s->name, get(a, "friendly_name"));
+  copy_string(s->icon, sizeof s->icon, get(a, "icon"));
+}
+
+static void apply_weather(const cJSON *state, const cJSON *a) {
+  if (cJSON_IsString(state)) {
+    const char *s = state->valuestring;
+    model_weather.valid = strcmp(s, "unavailable") && strcmp(s, "unknown");
+    strlcpy(model_weather.condition, s, sizeof model_weather.condition);
+  }
+  const cJSON *t = cJSON_IsObject(a) ? get(a, "temperature") : NULL;
+  if (cJSON_IsNumber(t))
+    model_weather.temperature = (float)t->valuedouble;
+}
+
+static void apply(const char *id, const cJSON *diff) {
+  if (!id || !cJSON_IsObject(diff))
+    return;
+  const cJSON *state = get(diff, "s"), *attributes = get(diff, "a");
+  light_t *l;
+  scene_t *s;
+  if ((l = model_light(id)))
+    apply_light(l, state, attributes);
+  else if ((s = model_scene(id)))
+    apply_scene(s, attributes);
+  else if (!strcmp(id, DIAL_WEATHER))
+    apply_weather(state, attributes);
+}
+
+static void apply_event(const cJSON *event) {
+  const cJSON *added = get(event, "a"), *changes = get(event, "c"), *item;
+  cJSON_ArrayForEach(item, added) apply(item->string, item);
+  cJSON_ArrayForEach(item, changes) apply(item->string, get(item, "+"));
+  if (cJSON_GetArraySize(added) > 0)
+    model_sort();
+  model_changed();
+}
+
 static void subscribe(void) {
   const char *ids[MODEL_MAX_LIGHTS + MODEL_MAX_SCENES + 1];
   int count = 0;
@@ -114,7 +238,7 @@ static void handle_result(const cJSON *msg) {
     const char *error = cJSON_GetStringValue(get(get(msg, "error"), "message"));
     ESP_LOGW(TAG, "request %d failed: %s", id, error ? error : "?");
   } else if (id == search_id) {
-    model_set_entities(get(get(msg, "result"), "entity"));
+    set_entities(get(get(msg, "result"), "entity"));
     ESP_LOGI(TAG, "%d lights, %d scenes labelled '%s'", model_light_count,
              model_scene_count, DIAL_LABEL);
     subscribe();
@@ -155,7 +279,7 @@ static void handle(const char *text) {
     handle_result(msg);
   } else if (!strcmp(type, "event") &&
              cJSON_GetNumberValue(get(msg, "id")) == subscribe_id) {
-    model_apply_event(get(msg, "event"));
+    apply_event(get(msg, "event"));
   }
   cJSON_Delete(msg);
 }

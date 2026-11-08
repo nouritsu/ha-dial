@@ -36,6 +36,6 @@
 #define ICON_WINDY_VARIANT "\U000F059E"
 #define ICON_EXCEPTIONAL "\U000F0F37"
 
-// HA `icon` attributes that have a glyph; anything else gets the fallback
+// `mdi:` icon names that have a glyph; anything else gets the fallback
 const char *icon_named(const char *name, const char *fallback);
 const char *icon_weather(const char *condition);

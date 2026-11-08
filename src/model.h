@@ -3,8 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "cJSON.h"
-
 #define MODEL_MAX_LIGHTS 16
 #define MODEL_MAX_SCENES 12
 #define MODEL_ID_LEN 64
@@ -24,6 +22,7 @@ typedef struct {
 typedef struct {
   char id[MODEL_ID_LEN];
   char name[MODEL_NAME_LEN];
+  // an `mdi:` name, or empty for the default bulb
   char icon[MODEL_ICON_LEN];
   uint16_t min_kelvin;
   uint16_t max_kelvin;
@@ -42,6 +41,7 @@ typedef struct {
 
 typedef struct {
   bool valid;
+  // as Home Assistant names them, such as "rainy"
   char condition[24];
   float temperature;
 } weather_t;
@@ -69,17 +69,18 @@ uint32_t model_layout(void);
 void model_changed(void);
 void model_loop(void);
 
-void model_set_entities(const cJSON *ids);
-void model_apply_event(const cJSON *event);
-
-// for backends that build the model themselves; the pointer is only good
-// until the next model_sort
+// backends fill the model in through these; light and scene pointers are only
+// good until the next model_sort or model_replace
+void model_new_light(light_t *l, const char *id, const char *name);
 light_t *model_add_light(const char *id);
+void model_replace(const light_t *lights, int light_count,
+                   const scene_t *scenes, int scene_count);
 // takes on l->remote unless the user is still adjusting the light
 void model_apply_remote(light_t *l);
 void model_sort(void);
 
 light_t *model_light(const char *id);
+scene_t *model_scene(const char *id);
 // false for an unavailable light while the setting hides those
 bool model_shown(const light_t *l);
 // covers only the lights that are shown

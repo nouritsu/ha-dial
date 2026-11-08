@@ -147,13 +147,6 @@ void home_relayout(void) {
       focus = i;
 }
 
-static const scene_t *find_scene(const char *id) {
-  for (int i = 0; i < model_scene_count; i++)
-    if (!strcmp(model_scenes[i].id, id))
-      return &model_scenes[i];
-  return NULL;
-}
-
 static void describe_light(const char *id, const char **glyph,
                            lv_color_t *color, char *text, size_t size) {
   target_t t;
@@ -214,7 +207,7 @@ static void refresh(void) {
         color = ui_on_pastel(color);
       }
     } else if (item->kind == ITEM_SCENE) {
-      const scene_t *s = find_scene(item->id);
+      const scene_t *s = model_scene(item->id);
       glyph = icon_named(s ? s->icon : NULL, ICON_HUE);
       color = COLOR_TERTIARY;
     }
@@ -243,7 +236,7 @@ static void refresh(void) {
     break;
   }
   case ITEM_SCENE: {
-    const scene_t *s = find_scene(item->id);
+    const scene_t *s = model_scene(item->id);
     color = COLOR_TERTIARY;
     title = s ? s->name : item->id;
     bool recent =
