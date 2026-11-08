@@ -47,6 +47,9 @@ static int backlight;
 static bool asleep = true, touch_held, capturing;
 static lv_indev_t *touch;
 static esp_timer_handle_t click_timer;
+// a thumb on the knob or the button tends to brush the screen, so a press that
+// lands before this is ignored until it lifts
+static uint32_t touch_guard_until;
 static struct {
   int x, y;
   uint32_t until;
@@ -298,6 +301,7 @@ bool board_touched(void) {
 
 static void read_touch(lv_indev_t *indev, lv_indev_data_t *data) {
   static int x, y;
+  static bool was_pressed;
   bool pressed;
   if (injected.until && now_ms() < injected.until) {
     pressed = true;
@@ -307,6 +311,9 @@ static void read_touch(lv_indev_t *indev, lv_indev_data_t *data) {
     injected.until = 0;
     pressed = read_finger(&x, &y);
   }
+  if (pressed && !was_pressed && now_ms() < touch_guard_until)
+    touch_held = true;
+  was_pressed = pressed;
   if (touch_held) {
     touch_held = pressed;
     pressed = false;
@@ -366,13 +373,20 @@ int board_take_steps(void) {
   pcnt_unit_get_count(encoder, &count);
   int delta = count - encoder_last;
   encoder_last = count;
+  if (delta)
+    touch_guard_until = now_ms() + TOUCH_GUARD_MS;
   encoder_remainder += ENCODER_REVERSED ? -delta : delta;
   int steps = encoder_remainder / ENCODER_COUNTS_PER_DETENT;
   encoder_remainder -= steps * ENCODER_COUNTS_PER_DETENT;
   return steps;
 }
 
-bool board_button_down(void) { return gpio_get_level(PIN_BUTTON) == 0; }
+bool board_button_down(void) {
+  bool down = gpio_get_level(PIN_BUTTON) == 0;
+  if (down)
+    touch_guard_until = now_ms() + TOUCH_GUARD_MS;
+  return down;
+}
 
 void board_ignore_held_input(void) {
   touch_held = true;

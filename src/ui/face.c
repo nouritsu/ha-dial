@@ -1,7 +1,9 @@
 #include "face.h"
 
 #include <math.h>
+#include <stdlib.h>
 
+#include "core/lv_obj_event_private.h"
 #include "screen.h"
 
 #define RING_RADIUS 116
@@ -9,7 +11,12 @@
 #define RING_START 135
 #define RING_SWEEP 270
 #define RING_SEGMENTS 54
+// touches nearer the middle than this belong to the icon
+#define RING_TOUCH_INNER 78
+// how far past either end of the ring a touch still counts as on it
+#define RING_TOUCH_SLACK 5
 #define KNOB_SIZE 22
+#define KNOB_TOUCHED_SIZE 30
 #define KNOB_BORDER 3
 #define KNOB_RADIUS 110
 #define KNOB_ANIM_MS 120
@@ -17,7 +24,9 @@
 #define MODE_SIZE 30
 #define MODE_RADIUS 100
 #define MODE_SPACING 20
+#define MODE_TOUCH_PAD 5
 #define DOT_SIZE 8
+#define DOT_TOUCH_PAD 16
 #define DOT_ACTIVE_WIDTH 20
 #define DOT_GAP 6
 #define DOT_BOTTOM 22
@@ -103,12 +112,101 @@ static void show(face_t *f, float t) {
 
 static void animate(void *f, int32_t permille) { show(f, permille / 1000.0f); }
 
+// degrees clockwise from the start of the ring round to the point
+static float past_start(const lv_point_t *p) {
+  float degrees =
+      atan2f(p->y - SCREEN_CENTER, p->x - SCREEN_CENTER) * 180 / (float)M_PI;
+  return fmodf(degrees - RING_START + 720, 360);
+}
+
+static void hit_ring(lv_event_t *e) {
+  lv_hit_test_info_t *info = lv_event_get_param(e);
+  int dx = info->point->x - SCREEN_CENTER, dy = info->point->y - SCREEN_CENTER;
+  float a = past_start(info->point);
+  info->res =
+      dx * dx + dy * dy >= RING_TOUCH_INNER * RING_TOUCH_INNER &&
+      (a <= RING_SWEEP + RING_TOUCH_SLACK || a >= 360 - RING_TOUCH_SLACK);
+}
+
+static void on_ring(lv_event_t *e) {
+  face_t *f = lv_event_get_user_data(e);
+  lv_point_t p;
+  switch (lv_event_get_code(e)) {
+  case LV_EVENT_PRESSED:
+    lv_obj_set_size(f->knob, KNOB_TOUCHED_SIZE, KNOB_TOUCHED_SIZE);
+    ui_sound(false);
+    // fall through
+  case LV_EVENT_PRESSING: {
+    lv_indev_get_point(lv_indev_active(), &p);
+    float a = past_start(&p);
+    // a touch just past an end belongs to that end
+    f->input->drag(a <= RING_SWEEP                 ? a / RING_SWEEP
+                   : a < (RING_SWEEP + 360) / 2.0f ? 1
+                                                   : 0);
+    break;
+  }
+  case LV_EVENT_RELEASED:
+  case LV_EVENT_PRESS_LOST:
+  case LV_EVENT_INDEV_RESET:
+    lv_obj_set_size(f->knob, KNOB_SIZE, KNOB_SIZE);
+    break;
+  default:
+    break;
+  }
+}
+
+static void on_gesture(lv_event_t *e) {
+  face_t *f = lv_event_get_user_data(e);
+  lv_indev_t *indev = lv_indev_active();
+  lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+  // whatever the swipe started on was not tapped
+  lv_indev_wait_release(indev);
+  if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT)
+    return;
+  ui_sound(false);
+  f->input->swipe(dir == LV_DIR_LEFT ? 1 : -1);
+}
+
+static void on_mode(lv_event_t *e) {
+  face_t *f = lv_event_get_user_data(e);
+  lv_obj_t *target = lv_event_get_current_target_obj(e);
+  for (int i = 0; i < f->mode_count; i++)
+    if (f->modes[i] == target)
+      f->input->pick(i);
+}
+
+// the dots are too small to hit one by one, so a tap picks the nearest
+static void on_dots(lv_event_t *e) {
+  face_t *f = lv_event_get_user_data(e);
+  lv_point_t p;
+  lv_indev_get_point(lv_indev_active(), &p);
+  int nearest = 0, best = SCREEN_SIZE;
+  for (int i = 0; i < f->mode_count; i++) {
+    lv_area_t a;
+    lv_obj_get_coords(f->modes[i], &a);
+    int d = abs((a.x1 + a.x2) / 2 - p.x);
+    if (d < best) {
+      best = d;
+      nearest = i;
+    }
+  }
+  f->input->pick(nearest);
+}
+
 void face_build(face_t *f, lv_obj_t *parent, const char *const *mode_icons,
-                int mode_count, lv_event_cb_t on_icon) {
+                int mode_count, const face_input_t *input) {
+  f->input = input;
+  lv_obj_add_event_cb(parent, on_gesture, LV_EVENT_GESTURE, f);
+
   f->ring = lv_obj_create(parent);
   lv_obj_set_size(f->ring, SCREEN_SIZE, SCREEN_SIZE);
-  ui_inert(f->ring);
+  lv_obj_set_scrollable(f->ring, false);
+  lv_obj_set_adv_hittest(f->ring, true);
+  // a drag along the ring is not a swipe
+  lv_obj_set_gesture_bubble(f->ring, false);
   lv_obj_add_event_cb(f->ring, draw_ring, LV_EVENT_DRAW_MAIN, f);
+  lv_obj_add_event_cb(f->ring, hit_ring, LV_EVENT_HIT_TEST, f);
+  lv_obj_add_event_cb(f->ring, on_ring, LV_EVENT_ALL, f);
 
   f->knob = ui_circle(parent, KNOB_SIZE, COLOR_PRIMARY);
   lv_obj_set_style_border_width(f->knob, KNOB_BORDER, 0);
@@ -121,7 +219,7 @@ void face_build(face_t *f, lv_obj_t *parent, const char *const *mode_icons,
   lv_obj_set_size(f->icon_button, 100, 76);
   lv_obj_align(f->icon_button, LV_ALIGN_TOP_MID, 0, 72);
   lv_obj_set_scrollable(f->icon_button, false);
-  ui_on_click(f->icon_button, on_icon, NULL);
+  ui_on_click(f->icon_button, input->icon, NULL);
   f->icon = ui_label(f->icon_button, &icons_72, COLOR_ON_SURFACE);
   lv_obj_center(f->icon);
 
@@ -143,6 +241,8 @@ void face_build(face_t *f, lv_obj_t *parent, const char *const *mode_icons,
     lv_obj_set_style_pad_column(row, DOT_GAP, 0);
     ui_inert(row);
     lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -DOT_BOTTOM);
+    lv_obj_set_ext_click_area(row, DOT_TOUCH_PAD);
+    ui_on_click(row, on_dots, f);
   }
   for (int i = 0; i < mode_count; i++) {
     if (f->dots) {
@@ -150,6 +250,8 @@ void face_build(face_t *f, lv_obj_t *parent, const char *const *mode_icons,
       continue;
     }
     f->modes[i] = ui_circle(parent, MODE_SIZE, COLOR_SECONDARY_CONTAINER);
+    lv_obj_set_ext_click_area(f->modes[i], MODE_TOUCH_PAD);
+    ui_on_click(f->modes[i], on_mode, f);
     f->mode_icons[i] =
         ui_label(f->modes[i], &icons_24, COLOR_ON_SURFACE_VARIANT);
     lv_label_set_text(f->mode_icons[i], mode_icons[i]);

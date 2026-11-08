@@ -50,7 +50,7 @@ void ui_set_text_color(lv_obj_t *obj, lv_color_t color);
 void ui_set_bg(lv_obj_t *obj, lv_color_t color, lv_opa_t opa);
 void ui_set_outline(lv_obj_t *obj, int width);
 void ui_place(lv_obj_t *obj, float degrees, float radius);
-// also clicks when the tap lands
+// also dims obj while it is pressed, and clicks when the tap lands
 void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data);
 // a click from the buzzer, when the settings ask for one from this input
 void ui_sound(bool knob);

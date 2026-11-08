@@ -10,6 +10,8 @@
 #include "screen.h"
 #include "settings.h"
 
+#define PRESSED_OPA LV_OPA_60
+
 static screen_t *const screens[] = {
     [SCREEN_HOME] = &home_screen,
     [SCREEN_LIGHT] = &light_screen,
@@ -97,6 +99,7 @@ static void on_tap_sound(lv_event_t *e) { ui_sound(false); }
 
 void ui_on_click(lv_obj_t *obj, lv_event_cb_t cb, void *user_data) {
   lv_obj_set_clickable(obj, true);
+  lv_obj_set_style_opa(obj, PRESSED_OPA, LV_STATE_PRESSED);
   lv_obj_add_event_cb(obj, on_tap_sound, LV_EVENT_SHORT_CLICKED, NULL);
   lv_obj_add_event_cb(obj, cb, LV_EVENT_SHORT_CLICKED, user_data);
 }

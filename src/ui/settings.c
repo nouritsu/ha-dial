@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -94,15 +95,6 @@ static void format(const option_t *o, char *text, size_t size) {
     snprintf(text, size, "%d h", v / 60);
 }
 
-static void on_icon(lv_event_t *e) { ui_show(SCREEN_HOME, NULL); }
-
-static void build(lv_obj_t *root) {
-  for (int i = 0; i < OPTION_COUNT; i++)
-    if (settings_offered(options[i].optional))
-      shown[shown_count++] = &options[i];
-  face_build(&face, root, NULL, shown_count, on_icon);
-}
-
 static void enter(const char *target) {
   selected = 0;
   face_reset(&face);
@@ -122,10 +114,11 @@ static void refresh(void) {
   face_set_modes(&face, selected, (1 << shown_count) - 1);
 }
 
-static void rotate(int steps) {
-  const option_t *o = shown[selected];
-  int i = choice_index(o) + steps;
-  *o->value = o->choices[i < 0 ? 0 : i >= o->count ? o->count - 1 : i];
+static bool set_choice(const option_t *o, int i) {
+  uint16_t value = o->choices[i < 0 ? 0 : i >= o->count ? o->count - 1 : i];
+  if (value == *o->value)
+    return false;
+  *o->value = value;
   if (o->value == &settings.brightness)
     board_set_backlight(settings.brightness);
   if (o->value == &settings.rotation)
@@ -133,6 +126,12 @@ static void rotate(int steps) {
   if (o->value == &settings.touch)
     board_set_touch(settings.touch);
   refresh();
+  return true;
+}
+
+static void rotate(int steps) {
+  const option_t *o = shown[selected];
+  set_choice(o, choice_index(o) + steps);
 }
 
 static void click(void) {
@@ -141,6 +140,42 @@ static void click(void) {
 }
 
 static void long_press(void) { ui_show(SCREEN_HOME, NULL); }
+
+static void on_icon(lv_event_t *e) { ui_show(SCREEN_HOME, NULL); }
+
+static void pick(int option) {
+  selected = option;
+  refresh();
+}
+
+// the options run as pages, with the home screen before the first
+static void swipe(int direction) {
+  int next = selected + direction;
+  if (next < 0)
+    ui_show(SCREEN_HOME, NULL);
+  else if (next < shown_count)
+    pick(next);
+}
+
+static void drag(float t) {
+  const option_t *o = shown[selected];
+  if (!set_choice(o, lroundf(t * (o->count - 1))))
+    return;
+  ui_sound(false);
+  // the screen turning under the finger would move it onto another choice
+  if (o->value == &settings.rotation)
+    lv_indev_wait_release(lv_indev_active());
+}
+
+static const face_input_t input = {
+    .icon = on_icon, .pick = pick, .swipe = swipe, .drag = drag};
+
+static void build(lv_obj_t *root) {
+  for (int i = 0; i < OPTION_COUNT; i++)
+    if (settings_offered(options[i].optional))
+      shown[shown_count++] = &options[i];
+  face_build(&face, root, NULL, shown_count, &input);
+}
 
 screen_t settings_screen = {
     .build = build,

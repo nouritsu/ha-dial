@@ -1,5 +1,7 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "actions.h"
@@ -19,6 +21,10 @@
 #define BUTTON_SPACING 38
 #define MIN_SPACING 37.5f
 #define ACTIVATED_MS 1500
+// presses nearer the middle than this belong to the centre, not the wheel
+#define WHEEL_INNER (CENTER_WIDTH / 2)
+// how far a finger moves before a press becomes a turn of the wheel
+#define WHEEL_SLOP 8
 
 typedef enum { ITEM_ALL, ITEM_LIGHT, ITEM_SCENE, ITEM_SETTINGS } item_kind_t;
 
@@ -27,6 +33,7 @@ typedef struct {
   char id[MODEL_ID_LEN];
   lv_obj_t *button;
   lv_obj_t *glyph;
+  float angle;
 } item_t;
 
 static lv_obj_t *root, *center, *name, *status;
@@ -34,9 +41,14 @@ static item_t items[MAX_ITEMS];
 static int item_count, focus;
 static char activated[MODEL_ID_LEN];
 static uint32_t activated_at;
+static struct {
+  bool armed, turning;
+  lv_point_t from;
+} wheel;
 
 static void activate(void);
 static void toggle(void);
+static void refresh(void);
 
 static void on_item_click(lv_event_t *e) {
   focus = (intptr_t)lv_event_get_user_data(e);
@@ -45,13 +57,69 @@ static void on_item_click(lv_event_t *e) {
 
 static void on_item_long_press(lv_event_t *e) {
   focus = (intptr_t)lv_event_get_user_data(e);
+  ui_sound(false);
   toggle();
 }
 
 static void on_center_click(lv_event_t *e) { activate(); }
 
+static float degrees_apart(float a, float b) {
+  float d = fmodf(fabsf(a - b), 360);
+  return d > 180 ? 360 - d : d;
+}
+
+static void turn_wheel(const lv_point_t *p) {
+  float at =
+      atan2f(p->y - SCREEN_CENTER, p->x - SCREEN_CENTER) * 180 / (float)M_PI;
+  int nearest = focus;
+  for (int i = 0; i < item_count; i++)
+    if (degrees_apart(items[i].angle, at) <
+        degrees_apart(items[nearest].angle, at))
+      nearest = i;
+  if (nearest == focus)
+    return;
+  focus = nearest;
+  ui_sound(false);
+  refresh();
+}
+
+// a finger dragged round the ring moves the focus to the button nearest it,
+// and lifting it opens nothing
+static void on_wheel(lv_event_t *e) {
+  lv_point_t p;
+  switch (lv_event_get_code(e)) {
+  case LV_EVENT_PRESSED: {
+    lv_indev_get_point(lv_indev_active(), &p);
+    int dx = p.x - SCREEN_CENTER, dy = p.y - SCREEN_CENTER;
+    wheel.armed = dx * dx + dy * dy >= WHEEL_INNER * WHEEL_INNER;
+    wheel.turning = false;
+    wheel.from = p;
+    break;
+  }
+  case LV_EVENT_PRESSING:
+    lv_indev_get_point(lv_indev_active(), &p);
+    if (!wheel.armed ||
+        (!wheel.turning &&
+         abs(p.x - wheel.from.x) + abs(p.y - wheel.from.y) < WHEEL_SLOP))
+      break;
+    if (!wheel.turning)
+      lv_obj_remove_state(lv_event_get_current_target_obj(e), LV_STATE_PRESSED);
+    wheel.turning = true;
+    turn_wheel(&p);
+    break;
+  case LV_EVENT_SHORT_CLICKED:
+  case LV_EVENT_LONG_PRESSED:
+    if (wheel.turning)
+      lv_event_stop_processing(e);
+    break;
+  default:
+    break;
+  }
+}
+
 static void build(lv_obj_t *parent) {
   root = parent;
+  lv_obj_add_event_cb(root, on_wheel, LV_EVENT_ALL, NULL);
   center = lv_obj_create(root);
   lv_obj_set_size(center, CENTER_WIDTH, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(center, LV_FLEX_FLOW_COLUMN);
@@ -82,6 +150,8 @@ static void add_item(item_kind_t kind, const char *id) {
   lv_obj_set_style_outline_pad(item->button, FOCUS_GAP, 0);
   item->glyph = ui_label(item->button, &icons_28, COLOR_ON_SURFACE_VARIANT);
   lv_obj_center(item->glyph);
+  // ahead of the others, so that it can hold back a tap that turned the wheel
+  lv_obj_add_event_cb(item->button, on_wheel, LV_EVENT_ALL, NULL);
   ui_on_click(item->button, on_item_click, (void *)(intptr_t)item_count);
   lv_obj_add_event_cb(item->button, on_item_long_press, LV_EVENT_LONG_PRESSED,
                       (void *)(intptr_t)item_count);
@@ -89,7 +159,6 @@ static void add_item(item_kind_t kind, const char *id) {
 }
 
 static void place_items(void) {
-  float angles[MAX_ITEMS];
   int lights = 0, scenes = 0, scene = 0;
   for (int i = 0; i < item_count; i++) {
     lights += items[i].kind == ITEM_ALL || items[i].kind == ITEM_LIGHT;
@@ -99,26 +168,27 @@ static void place_items(void) {
     switch (items[i].kind) {
     case ITEM_ALL:
     case ITEM_LIGHT:
-      angles[i] = -90 + BUTTON_SPACING * i;
+      items[i].angle = -90 + BUTTON_SPACING * i;
       break;
     case ITEM_SCENE:
-      angles[i] = 90 + BUTTON_SPACING * (scene++ - (scenes - 1) / 2.0f);
+      items[i].angle = 90 + BUTTON_SPACING * (scene++ - (scenes - 1) / 2.0f);
       break;
     case ITEM_SETTINGS:
-      angles[i] = 180;
+      items[i].angle = 180;
       break;
     }
   }
   bool crowded = false;
   for (int i = 0; i < item_count; i++) {
-    float next = i + 1 < item_count ? angles[i + 1] : angles[0] + 360;
-    if (item_count > 1 && next - angles[i] < MIN_SPACING)
+    float next = i + 1 < item_count ? items[i + 1].angle : items[0].angle + 360;
+    if (item_count > 1 && next - items[i].angle < MIN_SPACING)
       crowded = true;
   }
-  for (int i = 0; i < item_count; i++)
-    ui_place(items[i].button,
-             crowded ? -90 + 360.0f * i / item_count : angles[i],
-             BUTTON_RADIUS);
+  for (int i = 0; i < item_count; i++) {
+    if (crowded)
+      items[i].angle = -90 + 360.0f * i / item_count;
+    ui_place(items[i].button, items[i].angle, BUTTON_RADIUS);
+  }
 }
 
 void home_relayout(void) {

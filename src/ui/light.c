@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +11,9 @@
 #include "model.h"
 #include "screen.h"
 #include "ui.h"
+
+// touch can land anywhere on the ring, so the temperature rounds to this
+#define KELVIN_TOUCH_STEP 100
 
 enum { MODE_BRIGHTNESS, MODE_KELVIN, MODE_HUE, MODE_SATURATION, MODE_COUNT };
 
@@ -43,12 +47,6 @@ static lv_color_t saturation_at(float t, const void *ctx) {
 static lv_color_t kelvin_at(float t, const void *ctx) {
   return ui_pastel(
       model_kelvin_color(range.min + (int)(t * (range.max - range.min))));
-}
-
-static void on_icon(lv_event_t *e) { actions_toggle(target); }
-
-static void build(lv_obj_t *root) {
-  face_build(&face, root, mode_icons, MODE_COUNT, on_icon);
 }
 
 static void enter(const char *id) {
@@ -191,6 +189,69 @@ static void click(void) {
 }
 
 static void long_press(void) { ui_show(SCREEN_HOME, NULL); }
+
+static void on_icon(lv_event_t *e) { actions_toggle(target); }
+
+static void pick(int m) {
+  mode = m;
+  refresh();
+}
+
+// the modes run as pages, with the home screen before the first
+static void swipe(int direction) {
+  target_t t;
+  if (!model_target(target, &t))
+    return;
+  uint32_t modes = available_modes(&t);
+  int next = mode + direction;
+  while (next >= 0 && next < MODE_COUNT && !(modes >> next & 1))
+    next += direction;
+  if (next < 0)
+    ui_show(SCREEN_HOME, NULL);
+  else if (next < MODE_COUNT)
+    pick(next);
+}
+
+// a drag lands on the same value many times over, which needn't go out again
+static void set_new(prop_t prop, int now, int value) {
+  if (value != now)
+    actions_set(target, prop, value);
+}
+
+static void drag(float at) {
+  target_t t;
+  if (!model_target(target, &t))
+    return;
+  const light_state_t *s = &t.state;
+  int color = s->color_temp ? -1 : color_value(s->hue, s->saturation);
+  switch (mode) {
+  case MODE_BRIGHTNESS:
+    set_new(PROP_BRIGHTNESS, model_percent(s), lroundf(at * 100));
+    break;
+  case MODE_KELVIN:
+    set_new(PROP_KELVIN, s->color_temp ? s->kelvin : -1,
+            clamp(t.min_kelvin + lroundf(at * (t.max_kelvin - t.min_kelvin) /
+                                         KELVIN_TOUCH_STEP) *
+                                     KELVIN_TOUCH_STEP,
+                  t.min_kelvin, t.max_kelvin));
+    break;
+  case MODE_HUE:
+    set_new(
+        PROP_COLOR, color,
+        color_value(lroundf(at * 359), s->color_temp ? 100 : s->saturation));
+    break;
+  case MODE_SATURATION:
+    set_new(PROP_COLOR, color, color_value(s->hue, lroundf(at * 100)));
+    break;
+  }
+}
+
+static const face_input_t input = {
+    .icon = on_icon, .pick = pick, .swipe = swipe, .drag = drag};
+
+static void build(lv_obj_t *root) {
+  face_build(&face, root, mode_icons, MODE_COUNT, &input);
+}
 
 screen_t light_screen = {
     .build = build,

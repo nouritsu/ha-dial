@@ -9,7 +9,20 @@
 
 typedef lv_color_t (*face_color_fn)(float t, const void *ctx);
 
+// what touch on the face asks of the screen
 typedef struct {
+  // the big icon was tapped
+  lv_event_cb_t icon;
+  // a mode icon or page dot was tapped
+  void (*pick)(int mode);
+  // a swipe left (1) or right (-1)
+  void (*swipe)(int direction);
+  // the ring was touched at t, from 0 at its start to 1 at its end
+  void (*drag)(float t);
+} face_input_t;
+
+typedef struct {
+  const face_input_t *input;
   lv_obj_t *ring;
   lv_obj_t *knob;
   lv_obj_t *value;
@@ -31,7 +44,7 @@ typedef struct {
 
 // without mode icons, the modes show as page dots
 void face_build(face_t *f, lv_obj_t *parent, const char *const *mode_icons,
-                int mode_count, lv_event_cb_t on_icon);
+                int mode_count, const face_input_t *input);
 // the next value lands without animating, as when a screen opens
 void face_reset(face_t *f);
 void face_progress(face_t *f, float t, lv_color_t color, lv_color_t knob);
