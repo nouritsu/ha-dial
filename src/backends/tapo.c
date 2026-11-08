@@ -41,11 +41,13 @@ typedef enum {
   RESULT_EXPIRED,
 } result_t;
 
-// parameters of set_device_info; -1 and 0 leave a value as it is
+// parameters of set_device_info; -1 and 0 leave a value as it is, and the
+// saturation goes along with the hue
 typedef struct {
   int8_t on;
   uint8_t brightness;
   int16_t hue;
+  uint8_t saturation;
   uint16_t kelvin;
 } patch_t;
 
@@ -318,7 +320,7 @@ static char *compose(const job_t *job) {
       cJSON_AddNumberToObject(params, "brightness", p->brightness);
     if (p->hue >= 0) {
       cJSON_AddNumberToObject(params, "hue", p->hue);
-      cJSON_AddNumberToObject(params, "saturation", 100);
+      cJSON_AddNumberToObject(params, "saturation", p->saturation);
       cJSON_AddNumberToObject(params, "color_temp", 0);
     }
     if (p->kelvin)
@@ -427,7 +429,7 @@ static void apply_patch(light_state_t *s, const patch_t *p) {
     s->brightness = (p->brightness * 255 + 50) / 100;
   if (p->hue >= 0) {
     s->hue = p->hue;
-    s->saturation = 100;
+    s->saturation = p->saturation;
     s->color_temp = false;
   }
   if (p->kelvin) {
@@ -606,8 +608,9 @@ static void merge(patch_t *p, const light_t *l, prop_t prop, int value) {
   p->on = 1;
   if (prop == PROP_BRIGHTNESS) {
     p->brightness = value;
-  } else if (prop == PROP_HUE && l->has_color) {
-    p->hue = value;
+  } else if (prop == PROP_COLOR && l->has_color) {
+    p->hue = color_hue(value);
+    p->saturation = color_saturation(value);
     p->kelvin = 0;
   } else if (prop == PROP_KELVIN && l->has_temp) {
     p->kelvin = value < l->min_kelvin   ? l->min_kelvin

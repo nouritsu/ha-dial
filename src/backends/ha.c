@@ -370,9 +370,9 @@ static int ha_set(const char *const *ids, int count, prop_t prop, int value) {
     snprintf(data, sizeof data, "{\"brightness_pct\":%d,\"transition\":%.2f}",
              value, transition);
     break;
-  case PROP_HUE:
-    snprintf(data, sizeof data, "{\"hs_color\":[%d,100],\"transition\":%.2f}",
-             value, transition);
+  case PROP_COLOR:
+    snprintf(data, sizeof data, "{\"hs_color\":[%d,%d],\"transition\":%.2f}",
+             color_hue(value), color_saturation(value), transition);
     break;
   case PROP_KELVIN:
     snprintf(data, sizeof data,

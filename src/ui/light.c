@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,10 +11,10 @@
 #include "screen.h"
 #include "ui.h"
 
-enum { MODE_BRIGHTNESS, MODE_HUE, MODE_KELVIN, MODE_COUNT };
+enum { MODE_BRIGHTNESS, MODE_KELVIN, MODE_HUE, MODE_SATURATION, MODE_COUNT };
 
-static const char *const mode_icons[MODE_COUNT] = {ICON_BRIGHTNESS, ICON_HUE,
-                                                   ICON_KELVIN};
+static const char *const mode_icons[MODE_COUNT] = {ICON_BRIGHTNESS, ICON_KELVIN,
+                                                   ICON_HUE, ICON_SATURATION};
 
 static face_t face;
 static char target[MODEL_ID_LEN];
@@ -23,8 +24,8 @@ static struct {
 } range;
 
 static uint32_t available_modes(const target_t *t) {
-  return 1 << MODE_BRIGHTNESS | t->has_color << MODE_HUE |
-         t->has_temp << MODE_KELVIN;
+  return 1 << MODE_BRIGHTNESS | t->has_temp << MODE_KELVIN |
+         t->has_color << MODE_HUE | t->has_color << MODE_SATURATION;
 }
 
 static int clamp(int v, int lo, int hi) {
@@ -33,6 +34,10 @@ static int clamp(int v, int lo, int hi) {
 
 static lv_color_t hue_at(float t, const void *ctx) {
   return ui_pastel(model_hsv((int)(t * 359), 100, 100));
+}
+
+static lv_color_t saturation_at(float t, const void *ctx) {
+  return ui_pastel(model_hsv((intptr_t)ctx, (int)(t * 100), 100));
 }
 
 static lv_color_t kelvin_at(float t, const void *ctx) {
@@ -78,11 +83,6 @@ static void refresh(void) {
                   s->on ? tint : COLOR_ON_SURFACE_VARIANT);
     break;
   }
-  case MODE_HUE:
-    snprintf(text, sizeof text, "%d\u00B0", s->hue);
-    face_gradient(&face, s->hue / 359.0f, hue_at, NULL,
-                  ui_pastel(model_hsv(s->hue, 100, 100)));
-    break;
   case MODE_KELVIN: {
     int k = clamp(s->kelvin, range.min, range.max);
     snprintf(text, sizeof text, "%d K", k);
@@ -90,6 +90,18 @@ static void refresh(void) {
                   kelvin_at, &range, ui_pastel(model_kelvin_color(k)));
     break;
   }
+  case MODE_HUE:
+    snprintf(text, sizeof text, "%d\u00B0", s->hue);
+    face_gradient(&face, s->hue / 359.0f, hue_at, NULL,
+                  ui_pastel(model_hsv(s->hue, s->saturation, 100)));
+    break;
+  case MODE_SATURATION:
+    snprintf(text, sizeof text, "%d%%", s->saturation);
+    // the hue rides in ctx, so that a new hue redraws the ring
+    face_gradient(&face, s->saturation / 100.0f, saturation_at,
+                  (const void *)(intptr_t)s->hue,
+                  ui_pastel(model_hsv(s->hue, s->saturation, 100)));
+    break;
   }
   face_set_value(&face, text,
                  s->on ? COLOR_ON_SURFACE : COLOR_ON_SURFACE_VARIANT);
@@ -117,6 +129,12 @@ static int step_brightness(int v, int steps) {
   return clamp(v, 0, 100);
 }
 
+// moves onto the multiples of step from lo, wherever v started out
+static int step_snapped(int v, int steps, int step, int lo, int hi) {
+  int snapped = lo + (clamp(v, lo, hi) - lo + step / 2) / step * step;
+  return clamp(snapped + steps * step, lo, hi);
+}
+
 static int accelerate(int steps) {
   static uint32_t last, pace = ACCEL_IDLE_MS;
   static int direction;
@@ -142,19 +160,22 @@ static void rotate(int steps) {
     actions_set(target, PROP_BRIGHTNESS,
                 step_brightness(model_percent(s), steps));
     break;
+  case MODE_KELVIN:
+    actions_set(target, PROP_KELVIN,
+                step_snapped(s->kelvin, steps, KELVIN_STEP, t.min_kelvin,
+                             t.max_kelvin));
+    break;
   case MODE_HUE:
-    actions_set(target, PROP_HUE,
-                ((s->hue + steps * HUE_STEP) % 360 + 360) % 360);
+    // white light has no saturation worth keeping, so color starts out vivid
+    actions_set(target, PROP_COLOR,
+                color_value(((s->hue + steps * HUE_STEP) % 360 + 360) % 360,
+                            s->color_temp ? 100 : s->saturation));
     break;
-  case MODE_KELVIN: {
-    int k = clamp(s->kelvin, t.min_kelvin, t.max_kelvin);
-    int snapped = t.min_kelvin + (k - t.min_kelvin + KELVIN_STEP / 2) /
-                                     KELVIN_STEP * KELVIN_STEP;
-    actions_set(
-        target, PROP_KELVIN,
-        clamp(snapped + steps * KELVIN_STEP, t.min_kelvin, t.max_kelvin));
+  case MODE_SATURATION:
+    actions_set(target, PROP_COLOR,
+                color_value(s->hue, step_snapped(s->saturation, steps,
+                                                 SATURATION_STEP, 0, 100)));
     break;
-  }
   }
 }
 

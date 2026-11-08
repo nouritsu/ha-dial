@@ -13,9 +13,10 @@
 #define KNOB_BORDER 3
 #define KNOB_RADIUS 110
 #define KNOB_ANIM_MS 120
-#define MODE_SIZE 34
+// four modes fit between the ends of the ring, clear of the knob at either end
+#define MODE_SIZE 30
 #define MODE_RADIUS 100
-#define MODE_SPACING 24
+#define MODE_SPACING 20
 #define DOT_SIZE 8
 #define DOT_ACTIVE_WIDTH 20
 #define DOT_GAP 6
@@ -246,7 +247,8 @@ void face_set_modes(face_t *f, int active, uint32_t available) {
     ui_set_text_color(f->mode_icons[i], i == active
                                             ? COLOR_ON_SECONDARY_CONTAINER
                                             : COLOR_ON_SURFACE_VARIANT);
-    ui_place(f->modes[i], 90 + MODE_SPACING * (n++ - (visible - 1) / 2.0f),
+    // angles grow clockwise, so counting down puts the first mode on the left
+    ui_place(f->modes[i], 90 - MODE_SPACING * (n++ - (visible - 1) / 2.0f),
              MODE_RADIUS);
   }
 }

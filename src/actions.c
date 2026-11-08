@@ -78,9 +78,9 @@ void actions_set(const char *target, prop_t prop, int value) {
     s->on = prop != PROP_BRIGHTNESS || value > 0;
     if (prop == PROP_BRIGHTNESS && value)
       s->brightness = (value * 255 + 50) / 100;
-    if (prop == PROP_HUE) {
-      s->hue = value;
-      s->saturation = 100;
+    if (prop == PROP_COLOR) {
+      s->hue = color_hue(value);
+      s->saturation = color_saturation(value);
       s->color_temp = false;
     }
     if (prop == PROP_KELVIN) {

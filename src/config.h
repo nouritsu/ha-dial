@@ -17,6 +17,7 @@
 
 #define BRIGHTNESS_STEP 5
 #define HUE_STEP 10
+#define SATURATION_STEP 5
 #define KELVIN_STEP 200
 
 // light values move 2x or 4x per click once the clicks average under these
