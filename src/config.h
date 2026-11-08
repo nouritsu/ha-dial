@@ -30,6 +30,9 @@
 #define ECHO_HOLD_MS 2000
 #define WIFI_FALLBACK_MS 4000
 
+// Tapo bulbs never report changes on their own, so they are asked this often
+#define TAPO_POLL_MS 2000
+
 static inline uint32_t now_ms(void) {
   return (uint32_t)(esp_timer_get_time() / 1000);
 }

@@ -72,6 +72,9 @@ void model_loop(void);
 void model_set_entities(const cJSON *ids);
 void model_apply_event(const cJSON *event);
 
+// for backends that build the model themselves; the pointer is only good
+// until the next model_sort
+light_t *model_add_light(const char *id);
 // takes on l->remote unless the user is still adjusting the light
 void model_apply_remote(light_t *l);
 void model_sort(void);

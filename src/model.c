@@ -82,6 +82,18 @@ void model_set_entities(const cJSON *ids) {
   revision++;
 }
 
+light_t *model_add_light(const char *id) {
+  if (model_light_count == MODEL_MAX_LIGHTS)
+    return NULL;
+  light_t *l = &model_lights[model_light_count++];
+  *l = (light_t){.min_kelvin = 2000, .max_kelvin = 6500};
+  strlcpy(l->id, id, sizeof l->id);
+  strlcpy(l->name, id, sizeof l->name);
+  layout++;
+  revision++;
+  return l;
+}
+
 void model_apply_remote(light_t *l) {
   if (now_ms() >= l->hold_until) {
     l->state = l->remote;

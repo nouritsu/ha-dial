@@ -27,6 +27,10 @@ typedef struct {
   bool (*waiting)(int id);
 } backend_t;
 
-extern const backend_t ha_backend;
+extern const backend_t ha_backend, tapo_backend;
 
+#ifdef BACKEND_TAPO
+#define backend (&tapo_backend)
+#else
 #define backend (&ha_backend)
+#endif
