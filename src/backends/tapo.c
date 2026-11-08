@@ -18,6 +18,7 @@
 #include "mbedtls/sha256.h"
 #include "model.h"
 #include "net.h"
+#include "secrets.h"
 #include "settings.h"
 
 #define get cJSON_GetObjectItemCaseSensitive
@@ -528,7 +529,8 @@ static link_t summarize(void) {
 }
 
 static bool parse_login(void) {
-  const char *hex = TAPO_AUTH_HASH;
+  char hex[2 * sizeof auth_hash + 1];
+  secrets_get("tapo_auth_hash", hex, sizeof hex);
   if (strlen(hex) != 2 * sizeof auth_hash)
     return false;
   for (int i = 0; i < sizeof auth_hash; i++) {
@@ -541,8 +543,8 @@ static bool parse_login(void) {
 }
 
 static void tapo_init(void) {
-  static char hosts[] = TAPO_HOSTS;
-  char *rest;
+  char hosts[256], *rest;
+  secrets_get("tapo_hosts", hosts, sizeof hosts);
   for (char *host = strtok_r(hosts, ", ", &rest);
        host && bulb_count < MODEL_MAX_LIGHTS;
        host = strtok_r(NULL, ", ", &rest)) {

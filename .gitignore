@@ -5,6 +5,7 @@ devenv.local.yaml
 .pre-commit-config.yaml
 .claude/settings.json
 .mcp.json
+.cursor
 .env
 .cache
 .clangd
@@ -14,3 +15,5 @@ sdkconfig.dial
 sdkconfig.old
 compile_commands.json
 secrets.ini
+result
+result-*

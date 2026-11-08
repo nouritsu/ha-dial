@@ -12,6 +12,7 @@
 #include "esp_netif_sntp.h"
 #include "esp_wifi.h"
 #include "nvs.h"
+#include "secrets.h"
 
 static const char *TAG = "net";
 
@@ -20,6 +21,7 @@ static volatile bool got_ip, synced;
 static bool running, was_up, fell_back, sntp_started;
 static uint32_t started_at;
 static uint8_t cached_bssid[6], cached_channel;
+static char ssid[32], password[64];
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
@@ -37,9 +39,8 @@ static void on_sync(struct timeval *tv) { synced = true; }
 
 static void configure(bool use_cache) {
   wifi_config_t config = {.sta = {.scan_method = WIFI_FAST_SCAN}};
-  strlcpy((char *)config.sta.ssid, WIFI_SSID, sizeof config.sta.ssid);
-  strlcpy((char *)config.sta.password, WIFI_PASSWORD,
-          sizeof config.sta.password);
+  strlcpy((char *)config.sta.ssid, ssid, sizeof config.sta.ssid);
+  strlcpy((char *)config.sta.password, password, sizeof config.sta.password);
   if (use_cache && cached_channel) {
     config.sta.bssid_set = true;
     memcpy(config.sta.bssid, cached_bssid, sizeof cached_bssid);
@@ -78,22 +79,26 @@ static void save_cache(void) {
 }
 
 static void init_static_ip(void) {
-#ifdef STATIC_IP
+  char address[16], gateway[16], subnet[16], server[16];
+  secrets_get("static_ip", address, sizeof address);
+  if (!address[0])
+    return;
+  secrets_get("gateway", gateway, sizeof gateway);
+  secrets_get("subnet", subnet, sizeof subnet);
+  secrets_get("dns", server, sizeof server);
   esp_netif_ip_info_t ip = {0};
   esp_netif_dns_info_t dns = {0};
-  esp_netif_str_to_ip4(STATIC_IP, &ip.ip);
-  esp_netif_str_to_ip4(GATEWAY, &ip.gw);
-  esp_netif_str_to_ip4(SUBNET, &ip.netmask);
+  esp_netif_str_to_ip4(address, &ip.ip);
+  esp_netif_str_to_ip4(gateway, &ip.gw);
+  esp_netif_str_to_ip4(subnet, &ip.netmask);
   esp_netif_dhcpc_stop(netif);
   esp_netif_set_ip_info(netif, &ip);
-#ifdef DNS
-  esp_netif_str_to_ip4(DNS, &dns.ip.u_addr.ip4);
-#else
-  dns.ip.u_addr.ip4 = ip.gw;
-#endif
+  if (server[0])
+    esp_netif_str_to_ip4(server, &dns.ip.u_addr.ip4);
+  else
+    dns.ip.u_addr.ip4 = ip.gw;
   dns.ip.type = ESP_IPADDR_TYPE_V4;
   esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns);
-#endif
 }
 
 void net_init(void) {
@@ -112,6 +117,8 @@ void net_init(void) {
   esp_wifi_set_mode(WIFI_MODE_STA);
   esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL);
   esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL);
+  secrets_get("wifi_ssid", ssid, sizeof ssid);
+  secrets_get("wifi_password", password, sizeof password);
   init_static_ip();
   load_cache();
 }

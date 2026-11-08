@@ -13,6 +13,7 @@
 #include "net.h"
 #include "nvs_flash.h"
 #include "power.h"
+#include "secrets.h"
 #include "settings.h"
 #include "ui/ui.h"
 
@@ -115,6 +116,7 @@ void app_main(void) {
     nvs_flash_erase();
     nvs_flash_init();
   }
+  secrets_init();
   board_init();
   settings_load();
   board_set_rotation(settings.rotation);

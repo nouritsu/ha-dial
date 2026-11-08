@@ -12,6 +12,7 @@
 #include "freertos/queue.h"
 #include "model.h"
 #include "net.h"
+#include "secrets.h"
 
 #define get cJSON_GetObjectItemCaseSensitive
 
@@ -30,6 +31,7 @@ static link_t state = LINK_OFFLINE;
 static bool started;
 static int next_id, search_id, subscribe_id, answered;
 static char *partial;
+static char token[256];
 
 static void post(msg_type_t type, char *text) {
   msg_t msg = {type, text};
@@ -265,7 +267,7 @@ static void handle(const char *text) {
   if (!strcmp(type, "auth_required")) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "auth");
-    cJSON_AddStringToObject(root, "access_token", HA_TOKEN);
+    cJSON_AddStringToObject(root, "access_token", token);
     send_json(root);
   } else if (!strcmp(type, "auth_ok")) {
     cJSON *root = command("search/related", &search_id);
@@ -286,7 +288,12 @@ static void handle(const char *text) {
 
 static void ha_init(void) {
   static char uri[96];
-  snprintf(uri, sizeof uri, "ws://%s:%d/api/websocket", HA_HOST, HA_PORT);
+  char host[64], port[6];
+  secrets_get("ha_host", host, sizeof host);
+  secrets_get("ha_port", port, sizeof port);
+  secrets_get("ha_token", token, sizeof token);
+  snprintf(uri, sizeof uri, "ws://%s:%s/api/websocket", host,
+           port[0] ? port : "8123");
   inbox = xQueueCreate(16, sizeof(msg_t));
   esp_websocket_client_config_t config = {
       .uri = uri,
@@ -300,7 +307,7 @@ static void ha_init(void) {
   esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, on_event, NULL);
   esp_log_level_set("websocket_client", ESP_LOG_WARN);
   esp_log_level_set("transport_ws", ESP_LOG_WARN);
-  if (!HA_TOKEN[0])
+  if (!token[0])
     state = LINK_AUTH_FAILED;
 }
 

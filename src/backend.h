@@ -30,7 +30,7 @@ typedef struct {
   bool (*waiting)(int id);
 } backend_t;
 
-// `backend = <name>` in secrets.ini picks <name>_backend from
+// the DIAL_BACKEND CMake option, <name>, picks <name>_backend from
 // backends/<name>.c; every backend is compiled, and the linker drops the rest
 extern const backend_t DIAL_BACKEND;
 #define backend (&DIAL_BACKEND)

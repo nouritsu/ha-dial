@@ -16,8 +16,9 @@ in {
     pkgs.tio
     # lv_font_conv, through npx
     pkgs.nodejs
-    # tools/dial.py: screenshots and remote input over the serial console
-    (pkgs.python3.withPackages (ps: [ps.pyserial]))
+    # tools/dial.py: screenshots and remote input over the serial console;
+    # tools/flash.py: secrets.ini as an NVS partition image
+    (pkgs.python3.withPackages (ps: [ps.pyserial (ps.callPackage ./nix/nvs-partition-gen.nix {})]))
   ];
 
   env = {
@@ -37,10 +38,7 @@ in {
     "-fno-shrink-wrap"
   ];
 
-  treefmt.config = {
-    programs.clang-format.enable = true;
-    settings.global.excludes = ["src/ui/fonts/*"];
-  };
+  treefmt.config.imports = [./nix/treefmt.nix];
 
   scripts = let
     # the by-id link keeps working when the Dial comes back as another ttyACM after a reset
@@ -48,6 +46,8 @@ in {
   in {
     build.exec = ''pio run "$@"'';
     flash.exec = ''pio run -t upload --upload-port ${port} "$@"'';
+    # secrets.ini, into the partition that `flash` leaves alone
+    provision.exec = ''python3 "$DEVENV_ROOT/tools/flash.py" --port ${port} --secrets "$DEVENV_ROOT/secrets.ini" "$@"'';
     monitor.exec = ''pio device monitor -p ${port} "$@"'';
     # compile_commands.json for clangd
     compdb.exec = ''pio run -t compiledb "$@"'';
