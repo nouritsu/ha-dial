@@ -644,6 +644,7 @@ const backend_t tapo_backend = {
     .name = "Tapo",
     .rejected = "Login rejected",
     .empty = "No bulbs configured",
+    .settings = SETTING_HIDE_UNAVAILABLE | SETTING_BULB_REFRESH,
     .init = tapo_init,
     .loop = tapo_loop,
     .stop = tapo_stop,

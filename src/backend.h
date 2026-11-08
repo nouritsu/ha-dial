@@ -16,6 +16,8 @@ typedef struct {
   // status lines for the home screen
   const char *rejected;
   const char *empty;
+  // the optional SETTING_ values it shows on the settings screen
+  unsigned settings;
   void (*init)(void);
   void (*loop)(void);
   void (*stop)(void);

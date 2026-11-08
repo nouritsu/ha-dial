@@ -19,6 +19,7 @@ typedef struct {
   unit_t unit;
   // shown instead of the value, one per choice
   const char *const *labels;
+  setting_t optional;
 } option_t;
 
 static const uint16_t brightness_choices[] = {10, 20, 30, 40, 50,
@@ -27,43 +28,37 @@ static const uint16_t clock_choices[] = {5, 10, 15, 30, 60, 0};
 static const uint16_t sleep_choices[] = {15, 30, 60, 120, 300, 0};
 static const uint16_t power_off_choices[] = {10, 30, 60, 120, 360, 0};
 static const uint16_t rotation_choices[] = {0, 90, 180, 270};
-#ifdef BACKEND_TAPO
 static const uint16_t hide_choices[] = {0, 1};
 static const char *const hide_labels[] = {"Show", "Hide"};
 static const uint16_t refresh_choices[] = {1, 2, 5, 10, 30};
-#endif
 
-#define OPTION(title, icon, field, choices, unit)                              \
-  {title, icon, &settings.field, choices, sizeof choices / sizeof *choices,    \
-   unit}
-#define LABELLED(title, icon, field, choices, names)                           \
-  {title,                                                                      \
-   icon,                                                                       \
-   &settings.field,                                                            \
-   choices,                                                                    \
-   sizeof choices / sizeof *choices,                                           \
-   .labels = names}
+#define CHOICES(array) .choices = array, .count = sizeof array / sizeof *array
 
 static const option_t options[] = {
-    OPTION("Screen brightness", ICON_BRIGHTNESS, brightness, brightness_choices,
-           UNIT_PERCENT),
-    OPTION("Clock after", ICON_CLOCK, clock_after, clock_choices, UNIT_SECONDS),
-    OPTION("Sleep after", ICON_SLEEP, sleep_after, sleep_choices, UNIT_SECONDS),
-    OPTION("Power off after", ICON_POWER, power_off_after, power_off_choices,
-           UNIT_MINUTES),
-    OPTION("Rotation", ICON_ROTATION, rotation, rotation_choices, UNIT_DEGREES),
-#ifdef BACKEND_TAPO
-    LABELLED("Unavailable bulbs", ICON_EYE_OFF, hide_unavailable, hide_choices,
-             hide_labels),
-    OPTION("Check bulbs every", ICON_REFRESH, bulb_refresh, refresh_choices,
-           UNIT_SECONDS),
-#endif
+    {"Screen brightness", ICON_BRIGHTNESS, &settings.brightness,
+     CHOICES(brightness_choices), .unit = UNIT_PERCENT},
+    {"Clock after", ICON_CLOCK, &settings.clock_after, CHOICES(clock_choices),
+     .unit = UNIT_SECONDS},
+    {"Sleep after", ICON_SLEEP, &settings.sleep_after, CHOICES(sleep_choices),
+     .unit = UNIT_SECONDS},
+    {"Power off after", ICON_POWER, &settings.power_off_after,
+     CHOICES(power_off_choices), .unit = UNIT_MINUTES},
+    {"Rotation", ICON_ROTATION, &settings.rotation, CHOICES(rotation_choices),
+     .unit = UNIT_DEGREES},
+    {"Unavailable bulbs", ICON_EYE_OFF, &settings.hide_unavailable,
+     CHOICES(hide_choices), .labels = hide_labels,
+     .optional = SETTING_HIDE_UNAVAILABLE},
+    {"Check bulbs every", ICON_REFRESH, &settings.bulb_refresh,
+     CHOICES(refresh_choices), .unit = UNIT_SECONDS,
+     .optional = SETTING_BULB_REFRESH},
 };
 
 #define OPTION_COUNT (int)(sizeof options / sizeof *options)
 
 static face_t face;
-static int selected;
+// the options this backend offers, in table order
+static const option_t *shown[OPTION_COUNT];
+static int shown_count, selected;
 
 static int choice_index(const option_t *o) {
   for (int i = 0; i < o->count; i++)
@@ -93,7 +88,10 @@ static void format(const option_t *o, char *text, size_t size) {
 static void on_icon(lv_event_t *e) { ui_show(SCREEN_HOME, NULL); }
 
 static void build(lv_obj_t *root) {
-  face_build(&face, root, NULL, OPTION_COUNT, on_icon);
+  for (int i = 0; i < OPTION_COUNT; i++)
+    if (settings_offered(options[i].optional))
+      shown[shown_count++] = &options[i];
+  face_build(&face, root, NULL, shown_count, on_icon);
 }
 
 static void enter(const char *target) {
@@ -104,7 +102,7 @@ static void enter(const char *target) {
 static void leave(void) { settings_save(); }
 
 static void refresh(void) {
-  const option_t *o = &options[selected];
+  const option_t *o = shown[selected];
   char text[16];
   format(o, text, sizeof text);
   face_set_value(&face, text, COLOR_ON_SURFACE);
@@ -112,11 +110,11 @@ static void refresh(void) {
                 COLOR_PRIMARY);
   face_set_icon(&face, o->icon, COLOR_PRIMARY);
   face_set_name(&face, o->title);
-  face_set_modes(&face, selected, (1 << OPTION_COUNT) - 1);
+  face_set_modes(&face, selected, (1 << shown_count) - 1);
 }
 
 static void rotate(int steps) {
-  const option_t *o = &options[selected];
+  const option_t *o = shown[selected];
   int i = choice_index(o) + steps;
   *o->value = o->choices[i < 0 ? 0 : i >= o->count ? o->count - 1 : i];
   if (o->value == &settings.brightness)
@@ -127,7 +125,7 @@ static void rotate(int steps) {
 }
 
 static void click(void) {
-  selected = (selected + 1) % OPTION_COUNT;
+  selected = (selected + 1) % shown_count;
   refresh();
 }
 
